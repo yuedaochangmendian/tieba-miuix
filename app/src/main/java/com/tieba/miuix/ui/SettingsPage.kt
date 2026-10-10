@@ -10,13 +10,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.tieba.miuix.data.clearImageCache
+import com.tieba.miuix.data.formatBytes
+import com.tieba.miuix.data.imageCacheSize
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -39,12 +44,17 @@ fun SettingsPage(bottomPadding: androidx.compose.ui.unit.Dp, onOpenBlock: () -> 
     val requestLogin = LocalRequestLogin.current
     val blocks = blockStore
     val scrollBehavior = MiuixScrollBehavior()
+    val context = LocalContext.current
 
     // 「清空」是破坏性操作，清完给一句提示，让用户知道确实生效了。
     var clearedNote by remember { mutableStateOf("") }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var isFetchingTbs by remember { mutableStateOf(false) }
+    var cacheSize by remember { mutableStateOf(0L) }
     val scope = rememberCoroutineScope()
+
+    // 缓存体积要读盘，放在协程里算，别卡住首帧。
+    LaunchedEffect(Unit) { cacheSize = imageCacheSize(context) }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -210,6 +220,32 @@ fun SettingsPage(bottomPadding: androidx.compose.ui.unit.Dp, onOpenBlock: () -> 
                         onClick = {
                             searchHistoryStore.clear()
                             clearedNote = "搜索历史已清空"
+                        },
+                    )
+                }
+            }
+
+            item(key = "cache-title") { SectionTitle("存储") }
+            item(key = "cache") {
+                SettingsGroup {
+                    ActionRow(
+                        title = "清理图片缓存",
+                        summary = if (cacheSize > 0L) {
+                            "已占用 " + formatBytes(cacheSize)
+                        } else {
+                            "暂无缓存"
+                        },
+                        onClick = {
+                            scope.launch {
+                                val freed = cacheSize
+                                clearImageCache(context)
+                                cacheSize = imageCacheSize(context)
+                                clearedNote = if (freed > 0L) {
+                                    "已清理 " + formatBytes(freed) + " 图片缓存"
+                                } else {
+                                    "图片缓存本来就是空的"
+                                }
+                            }
                         },
                     )
                 }
