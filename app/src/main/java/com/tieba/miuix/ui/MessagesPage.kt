@@ -358,7 +358,7 @@ private fun buildMeta(item: MessageItem): String {
     val parts = mutableListOf<String>()
     if (item.title.isNotBlank()) parts += item.title
     if (item.forumName.isNotBlank()) parts += item.forumName + "吧"
-    parts += if (item.isFloorReply) "回复了你的主题" else "回复了你的楼层"
+    parts += if (item.isFloorReply) "回复了你" else "在楼中楼回复了你"
     return parts.joinToString(" · ")
 }
 
