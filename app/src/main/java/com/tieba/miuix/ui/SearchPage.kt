@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -451,6 +452,13 @@ private fun ThreadResultList(
     onHistoryClick: (String) -> Unit,
 ) {
     val context = LocalContext.current
+    var sheetItem by remember { mutableStateOf<ThreadSearchItem?>(null) }
+    var note by remember { mutableStateOf("") }
+    LaunchedEffect(note) {
+        if (note.isBlank()) return@LaunchedEffect
+        kotlinx.coroutines.delay(2200)
+        note = ""
+    }
     if (!searched) {
         SearchHistoryHint(history = history, bottomPadding = bottomPadding, onClick = onHistoryClick)
         return
@@ -471,6 +479,7 @@ private fun ThreadResultList(
                 insideMargin = PaddingValues(14.dp),
                 colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceContainer),
                 onClick = { onOpen(item.tid, item.forumName) },
+                onLongPress = { sheetItem = item },
             ) {
                 Column {
                     Text(
@@ -540,6 +549,23 @@ private fun ThreadResultList(
                 onLoadMore = onLoadMore,
             )
         }
+    }
+
+    if (note.isNotBlank()) {
+        MessageCard(
+            text = note,
+            isError = false,
+            modifier = Modifier.padding(horizontal = 12.dp),
+        )
+    }
+
+    val sheet = sheetItem
+    if (sheet != null) {
+        SearchThreadActionSheet(
+            item = sheet,
+            onDismiss = { sheetItem = null },
+            onNote = { note = it },
+        )
     }
 }
 

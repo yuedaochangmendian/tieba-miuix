@@ -122,6 +122,15 @@ fun formatRelativeTime(millis: Long): String {
 /** 主题帖的网页地址，用于分享与深链。 */
 fun threadWebUrl(tid: Long): String = "https://tieba.baidu.com/p/" + tid
 
+/** 把一个帖子的链接复制到剪贴板。 */
+fun copyThreadLink(context: Context, tid: Long): Boolean {
+    if (tid <= 0L) return false
+    return runCatching {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+        clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("帖子链接", threadWebUrl(tid)))
+    }.isSuccess
+}
+
 /**
  * 调起系统分享面板分享一个主题帖。
  *

@@ -76,6 +76,7 @@ fun ForumListPage(
     initialKeyword: String,
     onKeywordChange: (String) -> Unit,
     onOpenThread: (tid: Long, title: String, forumName: String) -> Unit,
+    onOpenUser: (portrait: String) -> Unit = {},
     bottomPadding: Dp = 16.dp,
 ) {
     val scope = rememberCoroutineScope()
@@ -95,6 +96,15 @@ fun ForumListPage(
     var isLoadingMore by remember { mutableStateOf(false) }
     var hasLoaded by remember { mutableStateOf(false) }
     var forumHome by remember { mutableStateOf<ForumHome?>(null) }
+    var actionThread by remember { mutableStateOf<ThreadInfo?>(null) }
+    var note by remember { mutableStateOf("") }
+
+    // 复制成功之类的提示展示几秒后自动消失，免得一直占着列表顶部。
+    LaunchedEffect(note) {
+        if (note.isBlank()) return@LaunchedEffect
+        kotlinx.coroutines.delay(2200)
+        note = ""
+    }
 
     suspend fun load(targetPage: Int, replace: Boolean) {
         if (forumName.isBlank()) return
@@ -204,6 +214,12 @@ fun ForumListPage(
                     }
                 }
 
+                if (note.isNotBlank()) {
+                    item(key = "note") {
+                        MessageCard(text = note, isError = false)
+                    }
+                }
+
                 // 还没进入任何吧时，顶部给一条「关注的吧 / 热门吧 / 最近逛过」快捷入口。
                 if (forumName.isBlank()) {
                     val home = forumHome
@@ -256,6 +272,7 @@ fun ForumListPage(
                         ThreadCard(
                             thread = thread,
                             onClick = { onOpenThread(thread.id, thread.title, forumName) },
+                            onLongClick = { actionThread = thread },
                         )
                     }
                 }
@@ -275,7 +292,30 @@ fun ForumListPage(
             }
         }
     }
-}
+
+    val sheetThread = actionThread
+    if (sheetThread != null) {
+        ThreadActionSheet(
+            thread = sheetThread,
+            onDismiss = { actionThread = null },
+            onOpenThread = {
+                actionThread = null
+                onOpenThread(sheetThread.id, sheetThread.title, forumName)
+            },
+            onOpenForum = { name ->
+                if (name.isNotBlank()) {
+                    keyword = name
+                    onKeywordChange(name)
+                    forumName = name
+                }
+            },
+            onOpenUser = { portrait ->
+                actionThread = null
+                onOpenUser(portrait)
+            },
+            onNote = { note = it },
+        )
+    }}
 
 @Composable
 private fun SearchCard(
@@ -353,6 +393,7 @@ private fun SearchCard(
 private fun ThreadCard(
     thread: ThreadInfo,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -362,6 +403,7 @@ private fun ThreadCard(
         pressFeedbackType = PressFeedbackType.Sink,
         showIndication = true,
         onClick = onClick,
+        onLongPress = onLongClick,
     ) {
         Text(
             text = thread.title.ifBlank { "（无标题）" },

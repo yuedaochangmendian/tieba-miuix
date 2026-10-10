@@ -118,7 +118,16 @@ private fun ForumDetailScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var reloadKey by remember { mutableStateOf(0) }
+    var sheetThread by remember { mutableStateOf<ForumDetailProto.SimpleThread?>(null) }
+    var note by remember { mutableStateOf("") }
     val scrollBehavior = MiuixScrollBehavior()
+
+    // 复制链接成功之类的提示展示几秒后自动消失。
+    LaunchedEffect(note) {
+        if (note.isBlank()) return@LaunchedEffect
+        kotlinx.coroutines.delay(2200)
+        note = ""
+    }
 
     LaunchedEffect(forumName, reloadKey) {
         if (forumName.isBlank()) {
@@ -197,6 +206,7 @@ private fun ForumDetailScreen(
                                 ForumThreadCard(
                                     thread = thread,
                                     onClick = { onOpenThread(thread.tid, thread.title) },
+                                    onLongClick = { sheetThread = thread },
                                 )
                             }
                         }
@@ -209,7 +219,27 @@ private fun ForumDetailScreen(
             } else if (message == null && isLoading) {
                 item(key = "loading") { MessageCard(text = "正在读取吧资料…", isError = false) }
             }
+            if (note.isNotBlank()) {
+                item(key = "note") { MessageCard(text = note, isError = false) }
+            }
         }
+    }
+
+    val sheet = sheetThread
+    if (sheet != null) {
+        ThreadActionSheet(
+            title = sheet.title,
+            tid = sheet.tid,
+            forumName = forumName,
+            onDismiss = { sheetThread = null },
+            onOpenThread = {
+                sheetThread = null
+                onOpenThread(sheet.tid, sheet.title)
+            },
+            onOpenForum = {},
+            onOpenUser = {},
+            onNote = { note = it },
+        )
     }
 }
 
@@ -289,7 +319,11 @@ private fun StatItem(label: String, value: String) {
 
 /** 吧内主题帖卡片：标题 + 摘要 + 回复数。 */
 @Composable
-private fun ForumThreadCard(thread: ForumDetailProto.SimpleThread, onClick: () -> Unit) {
+private fun ForumThreadCard(
+    thread: ForumDetailProto.SimpleThread,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 12.dp,
@@ -298,6 +332,7 @@ private fun ForumThreadCard(thread: ForumDetailProto.SimpleThread, onClick: () -
         pressFeedbackType = PressFeedbackType.Sink,
         showIndication = true,
         onClick = onClick,
+        onLongPress = onLongClick,
     ) {
         Text(
             text = thread.title.ifBlank { "（无标题）" },

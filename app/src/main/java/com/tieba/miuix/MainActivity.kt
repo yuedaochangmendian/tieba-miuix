@@ -59,6 +59,7 @@ import com.tieba.miuix.ui.SearchPage
 import com.tieba.miuix.ui.SettingsPage
 import com.tieba.miuix.ui.ThreadDetailActivity
 import com.tieba.miuix.ui.ThreadDetailPage
+import com.tieba.miuix.ui.UserPageActivity
 import com.tieba.miuix.ui.theme.TiebaTheme
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Card
@@ -222,6 +223,9 @@ private fun TiebaApp(app: TiebaApplication) {
                             context.startActivity(
                                 ThreadDetailActivity.intent(context, tid, title, forumName),
                             )
+                        },
+                        onOpenUser = { portrait ->
+                            context.startActivity(UserPageActivity.intent(context, portrait))
                         },
                         bottomPadding = bottomPadding,
                     )
