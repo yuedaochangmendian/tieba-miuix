@@ -53,6 +53,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
 /**
  * 吧详情页。
@@ -188,40 +189,25 @@ private fun ForumDetailScreen(
             val info = detail
             if (info != null) {
                 item(key = "info") { ForumInfoCard(detail = info) }
-            } else if (message == null && isLoading) {
-                item(key = "loading") { MessageCard(text = "正在读取吧资料…", isError = false) }
-            }
-            item(key = "soon") {
-                Spacer(modifier = Modifier.height(4.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 12.dp,
-                    insideMargin = PaddingValues(16.dp),
-                    colors = CardDefaults.defaultColors(
-                        color = MiuixTheme.colorScheme.surfaceContainer,
-                    ),
-                ) {
-                    Text(
-                        text = "吧内帖子列表、吧规与关注/取关还没做，先看帖子详情里的内容。",
-                        style = MiuixTheme.textStyles.footnote1,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        top.yukonga.miuix.kmp.basic.Button(
-                            onClick = onBack,
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text(text = "返回", style = MiuixTheme.textStyles.button)
-                        }
-                        top.yukonga.miuix.kmp.basic.Button(
-                            onClick = { reloadKey += 1 },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text(text = "重新加载", style = MiuixTheme.textStyles.button)
+                if (info.threads.isNotEmpty()) {
+                    item(key = "threads-title") { SectionTitle(text = "吧内主题帖") }
+                    info.threads.forEach { thread ->
+                        item(key = "thread-" + thread.tid) {
+                            Box(modifier = Modifier.padding(bottom = 10.dp)) {
+                                ForumThreadCard(
+                                    thread = thread,
+                                    onClick = { onOpenThread(thread.tid, thread.title) },
+                                )
+                            }
                         }
                     }
+                } else {
+                    item(key = "empty") {
+                        MessageCard(text = "这个吧暂时没有取到主题帖。", isError = false)
+                    }
                 }
+            } else if (message == null && isLoading) {
+                item(key = "loading") { MessageCard(text = "正在读取吧资料…", isError = false) }
             }
         }
     }
@@ -298,6 +284,54 @@ private fun StatItem(label: String, value: String) {
             style = MiuixTheme.textStyles.footnote2,
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         )
+    }
+}
+
+/** 吧内主题帖卡片：标题 + 摘要 + 回复数。 */
+@Composable
+private fun ForumThreadCard(thread: ForumDetailProto.SimpleThread, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 12.dp,
+        insideMargin = PaddingValues(16.dp),
+        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceContainer),
+        pressFeedbackType = PressFeedbackType.Sink,
+        showIndication = true,
+        onClick = onClick,
+    ) {
+        Text(
+            text = thread.title.ifBlank { "（无标题）" },
+            style = MiuixTheme.textStyles.body1,
+            color = MiuixTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        val preview = thread.preview
+        if (preview.isNotBlank()) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = preview,
+                style = MiuixTheme.textStyles.footnote1,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                text = formatCount(thread.replyNum) + " 回复",
+                style = MiuixTheme.textStyles.footnote2,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+            if (thread.lastTimeInt > 0) {
+                Text(
+                    text = formatTime(thread.lastTimeInt.toLong()),
+                    style = MiuixTheme.textStyles.footnote2,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                )
+            }
+        }
     }
 }
 

@@ -14,6 +14,30 @@ package com.tieba.miuix.protocol
  */
 object ForumDetailProto {
 
+    /** `Abstract`：帖子摘要里的一段内容（proto 里字段名是 `duringTime` / `voiceMD5`）。 */
+    data class AbstractSegment(
+        val type: Int = 0,
+        val text: String = "",
+        val link: String = "",
+        val src: String = "",
+        val un: String = "",
+        val duringTime: String = "",
+        val voiceMd5: String = "",
+    )
+
+    /** 吧里的一条主题帖（`SimpleThreadInfo`）。 */
+    data class SimpleThread(
+        val tid: Long = 0,
+        val title: String = "",
+        val replyNum: Int = 0,
+        val lastTimeInt: Int = 0,
+        val abstracts: List<AbstractSegment> = emptyList(),
+    ) {
+        /** 摘要正文，用来在列表里做预览。 */
+        val preview: String
+            get() = abstracts.joinToString("") { it.text }.trim()
+    }
+
     /** 吧详情里的一份资料。 */
     data class Detail(
         val forumId: Long = 0,
@@ -25,6 +49,7 @@ object ForumDetailProto {
         val lv1Name: String = "",
         val lv2Name: String = "",
         val isLiked: Boolean = false,
+        val threads: List<SimpleThread> = emptyList(),
     ) {
         val avatarUrl: String
             get() = when {
@@ -59,19 +84,81 @@ object ForumDetailProto {
                 1 -> error = TiebaError.parse(r.readMessage())
                 2 -> {
                     val data = r.readMessage()
+                    var forumInfo: Detail? = null
+                    val threads = mutableListOf<SimpleThread>()
                     while (data.hasMore) {
                         val dataTag = data.readTag()
                         when (dataTag ushr 3) {
-                            1 -> detail = parseDetail(data.readMessage())
+                            1 -> forumInfo = parseDetail(data.readMessage())
+                            2 -> threads += parseSimpleThread(data.readMessage())
                             else -> data.skip(dataTag and 7)
                         }
                     }
+                    detail = forumInfo?.copy(threads = threads)
                 }
 
                 else -> r.skip(tag and 7)
             }
         }
         return Response(error = error, detail = detail)
+    }
+
+    private fun parseSimpleThread(r: ProtoReader): SimpleThread {
+        var tid = 0L
+        var title = ""
+        var replyNum = 0
+        var lastTimeInt = 0
+        val abstracts = mutableListOf<AbstractSegment>()
+        while (r.hasMore) {
+            val tag = r.readTag()
+            when (tag ushr 3) {
+                1 -> tid = r.readInt64()
+                2 -> title = r.readString()
+                3 -> replyNum = r.readInt32()
+                4 -> lastTimeInt = r.readInt32()
+                5 -> abstracts += parseAbstract(r.readMessage())
+                else -> r.skip(tag and 7)
+            }
+        }
+        return SimpleThread(
+            tid = tid,
+            title = title,
+            replyNum = replyNum,
+            lastTimeInt = lastTimeInt,
+            abstracts = abstracts,
+        )
+    }
+
+    private fun parseAbstract(r: ProtoReader): AbstractSegment {
+        var type = 0
+        var text = ""
+        var link = ""
+        var src = ""
+        var un = ""
+        var duringTime = ""
+        var voiceMd5 = ""
+        while (r.hasMore) {
+            val tag = r.readTag()
+            when (tag ushr 3) {
+                1 -> type = r.readInt32()
+                2 -> text = r.readString()
+                3 -> link = r.readString()
+                4 -> src = r.readString()
+                5 -> un = r.readString()
+                6 -> duringTime = r.readString()
+                7 -> voiceMd5 = r.readString()
+                else -> r.skip(tag and 7)
+            }
+        }
+        return AbstractSegment(
+            type = type,
+            text = text,
+            link = link,
+            src = src,
+            un = un,
+            duringTime = duringTime,
+            voiceMd5 = voiceMd5,
+        )
     }
 
     private fun parseDetail(r: ProtoReader): Detail {
