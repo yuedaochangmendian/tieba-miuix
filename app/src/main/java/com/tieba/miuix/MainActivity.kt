@@ -52,6 +52,7 @@ import com.tieba.miuix.ui.BlockPage
 import com.tieba.miuix.ui.FavoritesPage
 import com.tieba.miuix.ui.ForumDetailActivity
 import com.tieba.miuix.ui.ForumListPage
+import com.tieba.miuix.ui.FollowListPage
 import com.tieba.miuix.ui.HistoryPage
 import com.tieba.miuix.ui.HomeFeedPage
 import com.tieba.miuix.ui.LocalAccountStore
@@ -98,6 +99,7 @@ private const val PROFILE_PAGE_FAVORITES = 1
 private const val PROFILE_PAGE_HISTORY = 2
 private const val PROFILE_PAGE_SETTINGS = 3
 private const val PROFILE_PAGE_BLOCK = 4
+private const val PROFILE_PAGE_FOLLOW = 5
 /**
  * 唯一的 Activity。
  *
@@ -248,6 +250,19 @@ private fun TiebaApp(app: TiebaApplication) {
                     onBack = { profilePage = PROFILE_PAGE_SETTINGS },
                 )
 
+                PROFILE_PAGE_FOLLOW -> FollowListPage(
+                    repository = repository,
+                    uid = 0L,
+                    title = "我关注的人",
+                    onBack = { profilePage = PROFILE_PAGE_NONE },
+                    onOpenUser = { targetUid, portrait, _ ->
+                        context.startActivity(
+                            UserPageActivity.intent(context, portrait, targetUid),
+                        )
+                    },
+                    bottomPadding = 16.dp,
+                )
+
                 else -> SettingsPage(
                     bottomPadding = 16.dp,
                     onOpenBlock = { profilePage = PROFILE_PAGE_BLOCK },
@@ -308,6 +323,7 @@ private fun TiebaApp(app: TiebaApplication) {
                                 UserPageActivity.intent(context, portrait, uid),
                             )
                         },
+                        onOpenFollowList = { profilePage = PROFILE_PAGE_FOLLOW },
                     )
 
                     else -> HomeFeedPage(

@@ -69,6 +69,8 @@ fun ProfilePage(
     onOpenFavorites: () -> Unit,
     /** 打开当前账号的用户页（「我的帖子与回复」）。 */
     onOpenSelf: (uid: Long, portrait: String) -> Unit = { _, _ -> },
+    /** 打开「我关注的人」。 */
+    onOpenFollowList: () -> Unit = {},
 ) {
     val repository = LocalRepository.current
     val accountStore = LocalAccountStore.current
@@ -256,6 +258,20 @@ fun ProfilePage(
                     title = "收藏的帖子",
                     summary = "登录后可见",
                     onClick = { onOpenFavorites() },
+                )
+            }
+
+            item(key = "entry-follow-list") {
+                ActionRow(
+                    title = "我关注的人",
+                    summary = if (accountStore.isLoggedIn) {
+                        "看看自己关注了哪些人"
+                    } else {
+                        "登录后可见"
+                    },
+                    onClick = {
+                        if (accountStore.isLoggedIn) onOpenFollowList() else requestLogin()
+                    },
                 )
             }
 

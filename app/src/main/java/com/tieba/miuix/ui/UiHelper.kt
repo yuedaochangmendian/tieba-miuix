@@ -14,6 +14,17 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/**
+ * 把裸 portrait（`tb.1.xxx`）补成可加载的头像地址。
+ *
+ * 有些接口（如 `/mo/q/search/user`）返回的已经是完整 URL，那就原样返回。
+ */
+fun portraitUrl(portrait: String): String = when {
+    portrait.isEmpty() -> ""
+    portrait.startsWith("http", ignoreCase = true) -> portrait
+    else -> "https://tb.himg.baidu.com/sys/portrait/item/$portrait"
+}
+
 /** 深色模式的三个选项。 */
 val DARK_MODE_OPTIONS: List<Pair<String, Int>> = listOf(
     "跟随系统" to DarkMode.FOLLOW_SYSTEM,

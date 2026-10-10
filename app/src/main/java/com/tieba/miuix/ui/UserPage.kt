@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package com.tieba.miuix.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,6 +72,7 @@ fun UserPage(
     portrait: String,
     onBack: () -> Unit,
     onOpenThread: (tid: Long, title: String, forumName: String) -> Unit,
+    onOpenFollowList: (uid: Long, name: String) -> Unit = { _, _ -> },
     uid: Long = 0L,
     bottomPadding: Dp = 0.dp,
 ) {
@@ -228,6 +230,17 @@ fun UserPage(
                             }
                         },
                         onMessageClick = { showFollowHint = true },
+                        onOpenFollowList = { clickedName ->
+                            val known = card?.tiebaUid?.takeIf { it > 0L } ?: uid
+                            if (known > 0L) {
+                                onOpenFollowList(known, clickedName)
+                            } else {
+                                scope.launch {
+                                    val id = runCatching { repository.selfUid() }.getOrDefault(0L)
+                                    onOpenFollowList(id, clickedName)
+                                }
+                            }
+                        },
                     )
                 }
                 item(key = "tabs") {
@@ -299,6 +312,7 @@ private fun ProfileCard(
     isFollowing: Boolean,
     onFollowClick: () -> Unit,
     onMessageClick: () -> Unit,
+    onOpenFollowList: (name: String) -> Unit,
 ) {
     Card(
         cornerRadius = 16.dp,
@@ -344,7 +358,14 @@ private fun ProfileCard(
         Row(modifier = Modifier.fillMaxWidth()) {
             StatColumn("获赞", card?.agreeNum ?: 0, Modifier.weight(1f))
             StatColumn("粉丝", card?.fansNum ?: 0, Modifier.weight(1f))
-            StatColumn("关注", card?.concernNum ?: 0, Modifier.weight(1f))
+            // 「关注」可以点进去看具体关注了谁。
+            StatColumn(
+                label = "关注",
+                value = card?.concernNum ?: 0,
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onOpenFollowList(card?.displayName.orEmpty()) },
+            )
         }
 
         if (!card?.intro.isNullOrBlank()) {

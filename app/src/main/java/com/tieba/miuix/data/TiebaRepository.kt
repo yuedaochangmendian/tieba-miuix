@@ -27,6 +27,7 @@ import com.tieba.miuix.protocol.ProtoHttp
 import com.tieba.miuix.protocol.ThreadSearchItem
 import com.tieba.miuix.protocol.ThreadSearchResult
 import com.tieba.miuix.protocol.UserCard
+import com.tieba.miuix.protocol.UserFollowList
 import com.tieba.miuix.protocol.UserPostResult
 import com.tieba.miuix.protocol.TiebaConst.ThreadSortType
 import com.tieba.miuix.protocol.TiebaConst
@@ -951,6 +952,35 @@ class TiebaRepository(
                 cookie = cookieHeader(),
             )
             CommonResult.of(json)
+        }
+
+    /**
+     * 某个用户的关注列表（`POST /c/u/follow/followList`）。
+     *
+     * `uid` 传 0 表示查当前登录用户（此时必须已登录）；传别人的 uid 时
+     * 匿名也能拿到公开的关注列表。
+     */
+    suspend fun getUserFollowList(uid: Long = 0L, pn: Int = 1): UserFollowList.Page =
+        withContext(Dispatchers.IO) {
+            val credentials = credentialsProvider()
+            if (uid <= 0L && !credentials.isLoggedIn) {
+                return@withContext UserFollowList.Page(
+                    errorCode = 340006,
+                    errorMessage = "查看自己的关注需要先登录：到「我的 → 账号」里登录贴吧",
+                )
+            }
+            val params = mutableListOf(
+                "pn" to pn.coerceAtLeast(1).toString(),
+                "_client_version" to TiebaConst.LATEST_VERSION,
+            )
+            if (uid > 0L) params += "uid" to uid.toString()
+            val json = WebHttp.postFormJson(
+                host = TiebaConst.APP_BASE_HOST,
+                path = "/c/u/follow/followList",
+                params = params,
+                cookie = cookieHeader(),
+            )
+            UserFollowList.parse(json)
         }
 
     /**

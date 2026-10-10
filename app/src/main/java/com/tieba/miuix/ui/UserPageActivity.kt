@@ -49,6 +49,9 @@ class UserPageActivity : ComponentActivity() {
                         onOpenThread = { tid, title, forumName ->
                             startActivity(ThreadDetailActivity.intent(host, tid, title, forumName))
                         },
+                        onOpenFollowList = { targetUid, name ->
+                            startActivity(FollowListActivity.intent(host, targetUid, name + " 的关注"))
+                        },
                     )
                 }
             }
