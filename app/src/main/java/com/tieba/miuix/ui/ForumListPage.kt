@@ -81,6 +81,11 @@ fun ForumListPage(
     onOpenThread: (tid: Long, title: String, forumName: String) -> Unit,
     onOpenUser: (portrait: String) -> Unit = {},
     bottomPadding: Dp = 16.dp,
+    /**
+     * 由外层页面（首页）提供顶栏时置 true：
+     * 此时不再画自己的 `SmallTopAppBar`，内容整体下移一行给外层顶栏让位。
+     */
+    embedded: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val scrollBehavior = MiuixScrollBehavior()
@@ -179,16 +184,18 @@ fun ForumListPage(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
-            SmallTopAppBar(
-                title = if (forumName.isBlank()) "贴吧 Miuix" else forumName + "吧",
-                subtitle = forum?.let { "会员 " + it.memberNum + " · 帖子 " + it.postNum }.orEmpty(),
-                scrollBehavior = scrollBehavior,
-                actions = {
-                    IconButton(onClick = { scope.launch { load(targetPage = 1, replace = true) } }) {
-                        Icon(imageVector = MiuixIcons.Refresh, contentDescription = "刷新")
-                    }
-                },
-            )
+            if (!embedded) {
+                SmallTopAppBar(
+                    title = if (forumName.isBlank()) "贴吧 Miuix" else forumName + "吧",
+                    subtitle = forum?.let { "会员 " + it.memberNum + " · 帖子 " + it.postNum }.orEmpty(),
+                    scrollBehavior = scrollBehavior,
+                    actions = {
+                        IconButton(onClick = { scope.launch { load(targetPage = 1, replace = true) } }) {
+                            Icon(imageVector = MiuixIcons.Refresh, contentDescription = "刷新")
+                        }
+                    },
+                )
+            }
         },
     ) { innerPadding ->
         val contentPadding = PaddingValues(

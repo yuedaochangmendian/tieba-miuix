@@ -13,7 +13,7 @@ object PbPageProto {
 
     /** 请求参数。 */
     data class Params(
-        /** 主题帖 id（`kz`，以字符串形式传递）。 */
+        /** 主题帖 id（`kz`）。 */
         val tid: Long,
         val pn: Int,
         val rn: Int,
@@ -24,6 +24,16 @@ object PbPageProto {
         val commentSortByAgree: Boolean,
         val commentRn: Int,
         val common: CommonReq,
+        /**
+         * `kz` 是否按字符串编码。
+         *
+         * 这个开关是**历史包袱**：早期把 `tid` 当字符串写进 4 号字段也能取到数据，
+         * 但现在服务端会认定「帖子不存在」并返回 `errno = 350004 贴子可能已被删除`
+         * （实测：同一 tid 用 int64 编码能拿到 39 KB 的正常响应）。
+         * `proto` 里 `kz` 声明为 `int64`，所以默认走整数编码；
+         * 万一将来某个服务端分组只认老写法，[TiebaRepository.getPosts] 会自动重试字符串形态。
+         */
+        val tidAsString: Boolean = false,
     )
 
     /** 响应结果。 */
@@ -38,7 +48,11 @@ object PbPageProto {
     fun pack(params: Params): ByteArray {
         val w = ProtoWriter()
         w.message(1) {
-            string(4, params.tid.toString())
+            if (params.tidAsString) {
+                string(4, params.tid.toString())
+            } else {
+                int64(4, params.tid)
+            }
             bool(5, params.onlyThreadAuthor)
             int32(6, params.sortType)
             int32(13, params.rn)

@@ -512,6 +512,10 @@ data class ThreadInfo(
                     59 -> isAd = r.readBool()
                     126 -> agreeNum = Agree.parse(r.readMessage()).agreeNum
                     135 -> shareNum = r.readInt32()
+                    // 首楼正文有多个下发位置：frs/page 用 142，推荐流还会用 21（Abstract）与 112。
+                    // 三者的 2 号字段都是文本，所以统一按 PbContent 解析。
+                    21 -> firstPostContent += PbContent.parse(r.readMessage())
+                    112 -> firstPostContent += PbContent.parse(r.readMessage())
                     142 -> firstPostContent += PbContent.parse(r.readMessage())
                     181 -> isDeleted = r.readBool()
                     190 -> collectNum = r.readInt32()

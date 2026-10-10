@@ -52,6 +52,7 @@ import com.tieba.miuix.ui.FavoritesPage
 import com.tieba.miuix.ui.ForumDetailActivity
 import com.tieba.miuix.ui.ForumListPage
 import com.tieba.miuix.ui.HistoryPage
+import com.tieba.miuix.ui.HomeFeedPage
 import com.tieba.miuix.ui.LocalAccountStore
 import com.tieba.miuix.ui.LocalHistoryStore
 import com.tieba.miuix.ui.LocalLoginNote
@@ -61,6 +62,7 @@ import com.tieba.miuix.ui.LocalSearchHistoryStore
 import com.tieba.miuix.ui.LocalSettingsStore
 import com.tieba.miuix.ui.LoginActivity
 import com.tieba.miuix.ui.MessagesPage
+import com.tieba.miuix.ui.ProfilePage
 import com.tieba.miuix.ui.SearchPage
 import com.tieba.miuix.ui.SettingsPage
 import com.tieba.miuix.ui.ThreadDetailActivity
@@ -82,13 +84,14 @@ import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
-/** 底部导航的五个入口。 */
+/** 底部导航的入口。 */
 private const val TAB_HOME = 0
 private const val TAB_MESSAGES = 1
 private const val TAB_SEARCH = 2
-private const val TAB_FAVORITES = 3
-private const val TAB_HISTORY = 4
-private const val TAB_SETTINGS = 5
+private const val TAB_PROFILE = 3
+private const val TAB_FAVORITES = 4
+private const val TAB_HISTORY = 5
+private const val TAB_SETTINGS = 6
 /**
  * 唯一的 Activity。
  *
@@ -180,7 +183,7 @@ private fun TiebaApp(app: TiebaApplication) {
             BottomTab("首页", MiuixIcons.Home, TAB_HOME),
             BottomTab("消息", MiuixIcons.Messages, TAB_MESSAGES),
             BottomTab("搜索", MiuixIcons.Search, TAB_SEARCH),
-            BottomTab("我的", MiuixIcons.Favorites, TAB_FAVORITES),
+            BottomTab("我的", MiuixIcons.Favorites, TAB_PROFILE),
             BottomTab("历史", MiuixIcons.Recent, TAB_HISTORY),
             BottomTab("设置", MiuixIcons.Settings, TAB_SETTINGS),
         )
@@ -247,6 +250,22 @@ private fun TiebaApp(app: TiebaApplication) {
                         },
                     )
 
+                    TAB_PROFILE -> ProfilePage(
+                        bottomPadding = bottomPadding,
+                        onOpenForum = { name ->
+                            context.startActivity(ForumDetailActivity.intent(context, name))
+                        },
+                        onOpenThread = { tid, title, forumName ->
+                            context.startActivity(
+                                ThreadDetailActivity.intent(context, tid, title, forumName),
+                            )
+                        },
+                        onOpenSettings = { selectedTab = TAB_SETTINGS },
+                        onOpenHistory = { selectedTab = TAB_HISTORY },
+                        onOpenSearchHistory = { selectedTab = TAB_SEARCH },
+                        onOpenFavorites = { selectedTab = TAB_FAVORITES },
+                    )
+
                     TAB_HISTORY -> HistoryPage(
                         bottomPadding = bottomPadding,
                         onOpenThread = { record ->
@@ -266,7 +285,7 @@ private fun TiebaApp(app: TiebaApplication) {
 
                     TAB_SETTINGS -> SettingsPage(bottomPadding = bottomPadding)
 
-                    else -> ForumListPage(
+                    else -> HomeFeedPage(
                         repository = repository,
                         initialKeyword = keyword,
                         onKeywordChange = { keyword = it },

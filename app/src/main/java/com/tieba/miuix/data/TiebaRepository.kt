@@ -9,6 +9,7 @@ import com.tieba.miuix.protocol.ForumDetailProto
 import com.tieba.miuix.protocol.ForumHome
 import com.tieba.miuix.protocol.ForumSearchResult
 import com.tieba.miuix.protocol.FrsPageProto
+import com.tieba.miuix.protocol.HotThreadListProto
 import com.tieba.miuix.protocol.ForumSearchPostResult
 import com.tieba.miuix.protocol.MessageCounts
 import com.tieba.miuix.protocol.MessageList
@@ -33,6 +34,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+
+/**
+ * `pb/page` 在「帖子不存在」时返回的 errno。
+ *
+ * 实测这个 errno 也会因为请求体编码不被服务端接受而出现（见 [PbPageProto.Params.tidAsString]），
+ * 所以 [TiebaRepository.getPosts] 会用它触发一次编码形态的兜底重试。
+ */
+internal const val ERRNO_THREAD_NOT_FOUND = 350004
 
 /** 登录凭证。匿名浏览时全部为空。 */
 data class Credentials(
@@ -116,22 +125,71 @@ class TiebaRepository(
             bduss = if (withComments) credentials.bduss else "",
             stoken = if (withComments) credentials.stoken else "",
         )
-        val payload = PbPageProto.pack(
-            PbPageProto.Params(
-                tid = tid,
-                pn = pn,
-                rn = safeRn,
-                sortType = sortType,
-                onlyThreadAuthor = onlyThreadAuthor,
-                withComments = withComments,
-                commentSortByAgree = true,
-                commentRn = 4,
-                common = common,
+        val url = "https://${TiebaConst.APP_BASE_HOST}/c/f/pb/page?cmd=${TiebaConst.CMD_PB_PAGE}"
+        val response = PbPageProto.parse(
+            ProtoHttp.post(
+                url,
+                PbPageProto.pack(
+                    PbPageProto.Params(
+                        tid = tid,
+                        pn = pn,
+                        rn = safeRn,
+                        sortType = sortType,
+                        onlyThreadAuthor = onlyThreadAuthor,
+                        withComments = withComments,
+                        commentSortByAgree = true,
+                        commentRn = 4,
+                        common = common,
+                    ),
+                ),
             ),
         )
-        val url = "https://${TiebaConst.APP_BASE_HOST}/c/f/pb/page?cmd=${TiebaConst.CMD_PB_PAGE}"
-        PbPageProto.parse(ProtoHttp.post(url, payload))
+        // 少数服务端分组可能只认旧版「kz 用字符串编码」的写法，
+        // 这种情况下会返回 350004「贴子可能已被删除」，用字符串形态再试一次。
+        if (response.error.errno == ERRNO_THREAD_NOT_FOUND) {
+            val retry = PbPageProto.parse(
+                ProtoHttp.post(
+                    url,
+                    PbPageProto.pack(
+                        PbPageProto.Params(
+                            tid = tid,
+                            pn = pn,
+                            rn = safeRn,
+                            sortType = sortType,
+                            onlyThreadAuthor = onlyThreadAuthor,
+                            withComments = withComments,
+                            commentSortByAgree = true,
+                            commentRn = 4,
+                            common = common,
+                            tidAsString = true,
+                        ),
+                    ),
+                ),
+            )
+            if (retry.error.errno != ERRNO_THREAD_NOT_FOUND) return@withContext retry
+        }
+        response
     }
+
+    /**
+     * 加载首页热门推荐流（`/c/f/forum/hotThreadList`，`CMD=309661`）。
+     *
+     * 匿名可用，不需要 BDUSS。
+     */
+    suspend fun getHotThreads(tabCode: String = HotThreadListProto.TAB_CODE_ALL): HotThreadListProto.Response =
+        withContext(Dispatchers.IO) {
+            val credentials = credentialsProvider()
+            val common = CommonReq(
+                clientVersion = TiebaConst.LATEST_VERSION,
+                bduss = credentials.bduss,
+                stoken = credentials.stoken,
+            )
+            val url = "http://${TiebaConst.APP_BASE_HOST}/c/f/forum/hotThreadList" +
+                "?cmd=${TiebaConst.CMD_HOT_THREAD_LIST}"
+            HotThreadListProto.parse(
+                ProtoHttp.post(url, HotThreadListProto.pack(common, tabCode)),
+            )
+        }
 
     /**
      * 加载某一层的楼中楼（`/c/f/pb/floor`，`CMD=302002`）。
