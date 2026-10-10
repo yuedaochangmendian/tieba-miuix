@@ -35,6 +35,7 @@ data class Credentials(
     val stoken: String = "",
     val tbs: String = "",
     val uid: String = "",
+    val nameShow: String = "",
 ) {
     val isLoggedIn: Boolean get() = bduss.isNotEmpty()
 }
@@ -387,6 +388,66 @@ class TiebaRepository(
         ReplyResult.parse(json)
     }
 
+    /**
+     * 发主题帖（`POST /c/c/thread/add`）。
+     *
+     * 字段照 TiebaLite 的 `addThreadFlow` 抄：`is_ntitle` 表示是否带标题
+     * （无标题模式标题传空串），`new_vcode` 在它那里被写成 `not_see_lz`（历史
+     * 命名，值固定 1）。和回帖一样必须带 `tbs`，否则服务端按未验证处理。
+     */
+    suspend fun addThread(
+        forumName: String,
+        forumId: Long,
+        title: String,
+        content: String,
+    ): ReplyResult = withContext(Dispatchers.IO) {
+        val credentials = credentialsProvider()
+        if (!credentials.isLoggedIn) {
+            return@withContext ReplyResult(errorMessage = "还没有登录，先登录再发帖")
+        }
+        if (content.isBlank()) {
+            return@withContext ReplyResult(errorMessage = "正文不能为空")
+        }
+        if (forumName.isBlank() && forumId <= 0L) {
+            return@withContext ReplyResult(errorMessage = "没有指定要发到哪个吧")
+        }
+        if (credentials.tbs.isEmpty()) {
+            return@withContext ReplyResult(
+                errorMessage = "缺少发帖令牌（tbs），到设置里刷新后再试",
+            )
+        }
+        val hasTitle = title.isNotBlank()
+        val params = listOf(
+            "anonymous" to "1",
+            "call_from" to "2",
+            "can_no_forum" to "0",
+            "content" to content,
+            "cuid_gid" to "",
+            "entrance_type" to "1",
+            "fid" to forumId.toString(),
+            "is_feedback" to "0",
+            "is_hide" to "0",
+            "is_ntitle" to (if (hasTitle) "1" else "0"),
+            "kw" to forumName,
+            "name_show" to credentials.nameShow,
+            "new_vcode" to "1",
+            "reply_uid" to "null",
+            "stoken" to credentials.stoken,
+            "takephoto_num" to "0",
+            "tbs" to credentials.tbs,
+            "title" to title,
+            "vcode_tag" to "12",
+            "z_id" to "",
+            "_client_version" to TiebaConst.LATEST_VERSION,
+        )
+        val json = WebHttp.postFormJson(
+            host = TiebaConst.APP_BASE_HOST,
+            path = "/c/c/thread/add",
+            params = params,
+        )
+        ReplyResult.parse(json)
+    }
+
     // ------------------------------------------------------------ 收藏 / 关注
 
     /**
@@ -533,6 +594,54 @@ class TiebaRepository(
         )
         CommonResult.of(json)
     }
+
+    /**
+     * 关注 / 取关某个用户。
+     *
+     * `POST /c/c/user/follow`（取关是 `/c/c/user/unfollow`）：只认**裸 portrait**
+     * （`tb.1.xxx`，不能带 `?t=` 或 `.jpg`，否则拿不到人），`tbs` + `stoken` 必带。
+     * 取关接口比关注多一个 `timestamp` 字段，照 TiebaLite 的 `unfollowFlow` 带上。
+     */
+    suspend fun setUserFollowed(portrait: String, follow: Boolean): CommonResult =
+        withContext(Dispatchers.IO) {
+            val credentials = credentialsProvider()
+            if (!credentials.isLoggedIn) {
+                return@withContext CommonResult(
+                    success = false,
+                    errorCode = 340006,
+                    errorMessage = "关注需要先登录：到「我的 → 账号」里登录贴吧",
+                )
+            }
+            if (credentials.tbs.isEmpty()) {
+                return@withContext CommonResult(
+                    success = false,
+                    errorCode = 4,
+                    errorMessage = "缺少发帖令牌（tbs），到「我的 → 账号」里刷新一下",
+                )
+            }
+            val bare = barePortrait(portrait)
+            if (bare.isEmpty()) {
+                return@withContext CommonResult(false, 0, "没有拿到这个用户的标识")
+            }
+            val base = mutableListOf(
+                "portrait" to bare,
+                "tbs" to credentials.tbs,
+                "authsid" to "null",
+                "stoken" to credentials.stoken,
+                "from_type" to "2",
+                "in_live" to "0",
+                "_client_version" to TiebaConst.LATEST_VERSION,
+            )
+            if (!follow) {
+                base += "timestamp" to System.currentTimeMillis().toString()
+            }
+            val json = WebHttp.postFormJson(
+                host = TiebaConst.APP_BASE_HOST,
+                path = if (follow) "/c/c/user/follow" else "/c/c/user/unfollow",
+                params = base,
+            )
+            CommonResult.of(json)
+        }
 
     /**
      * 单个吧签到（`POST /c/c/forum/sign`）。

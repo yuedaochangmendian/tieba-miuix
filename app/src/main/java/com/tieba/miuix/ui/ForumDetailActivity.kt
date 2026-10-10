@@ -45,6 +45,7 @@ import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -54,6 +55,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Create
 import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.icon.extended.Refresh
@@ -127,6 +129,9 @@ private fun ForumDetailScreen(
     var sheetThread by remember { mutableStateOf<ForumDetailProto.SimpleThread?>(null) }
     var note by remember { mutableStateOf("") }
     var showConcernDialog by remember { mutableStateOf(false) }
+    var showNewThread by remember { mutableStateOf(false) }
+    var newThreadSending by remember { mutableStateOf(false) }
+    var newThreadError by remember { mutableStateOf("") }
     var isSigning by remember { mutableStateOf(false) }
     val accountStore = LocalAccountStore.current
     val scope = rememberCoroutineScope()
@@ -172,6 +177,23 @@ private fun ForumDetailScreen(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        floatingActionButton = {
+            FloatingActionButton(onClick = {
+                when {
+                    !accountStore.isLoggedIn ->
+                        note = "发帖需要先登录：到「设置 → 账号」里登录贴吧"
+                    !accountStore.hasTbs ->
+                        note = "还没取到发帖令牌（tbs），到「设置 → 账号」里刷新一下"
+                    detail == null -> note = "吧资料还没读出来，稍后再试"
+                    else -> {
+                        newThreadError = ""
+                        showNewThread = true
+                    }
+                }
+            }) {
+                Icon(imageVector = MiuixIcons.Create, contentDescription = "发帖")
+            }
+        },
         topBar = {
             SmallTopAppBar(
                 title = forumName.ifBlank { "吧详情" },
@@ -277,6 +299,40 @@ private fun ForumDetailScreen(
                 item(key = "note") { MessageCard(text = note, isError = false) }
             }
         }
+    }
+
+    val dialogInfo = detail
+    if (showNewThread && dialogInfo != null) {
+        NewThreadDialog(
+            forumName = dialogInfo.forumName.ifBlank { forumName },
+            sending = newThreadSending,
+            errorMessage = newThreadError,
+            onDismiss = { if (!newThreadSending) showNewThread = false },
+            onSend = { title, content ->
+                newThreadSending = true
+                newThreadError = ""
+                scope.launch {
+                    val result = runCatching {
+                        repository.addThread(
+                            forumName = dialogInfo.forumName.ifBlank { forumName },
+                            forumId = dialogInfo.forumId,
+                            title = title,
+                            content = content,
+                        )
+                    }.getOrNull()
+                    newThreadSending = false
+                    if (result == null) {
+                        newThreadError = "网络请求失败，稍后再试"
+                    } else if (result.isSuccess) {
+                        showNewThread = false
+                        note = result.displayMessage("发帖成功")
+                        reloadKey += 1
+                    } else {
+                        newThreadError = result.displayMessage("发帖失败")
+                    }
+                }
+            },
+        )
     }
 
     val sheet = sheetThread

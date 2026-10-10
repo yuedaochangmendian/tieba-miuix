@@ -401,7 +401,7 @@ fun ThreadDetailPage(
                         // 回到第一页重新拉，顺带把页码、总楼层数刷新掉。
                         runCatching { reload() }
                     } else {
-                        replyError = result.displayMessage
+                        replyError = result.displayMessage()
                     }
                 }
             },

@@ -88,6 +88,14 @@ fun UserPage(
     var isLoadingMore by remember { mutableStateOf(false) }
     var loadedOnce by remember { mutableStateOf(false) }
     var showFollowHint by remember { mutableStateOf(false) }
+    var isFollowing by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf("") }
+
+    LaunchedEffect(note) {
+        if (note.isBlank()) return@LaunchedEffect
+        kotlinx.coroutines.delay(2200)
+        note = ""
+    }
 
     val scrollBehavior = MiuixScrollBehavior()
     val pullToRefreshState = rememberPullToRefreshState()
@@ -182,6 +190,9 @@ fun UserPage(
                 ),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                if (note.isNotBlank()) {
+                    item(key = "note") { MessageCard(note, isError = false) }
+                }
                 if (errorMessage.isNotEmpty()) {
                     item(key = "error") { MessageCard(errorMessage, isError = true) }
                 }
@@ -191,7 +202,31 @@ fun UserPage(
                         isLoading = isLoading && !loadedOnce,
                         showFollowHint = showFollowHint,
                         isLoggedIn = accountStore.isLoggedIn,
-                        onFollowClick = { showFollowHint = true },
+                        isFollowing = isFollowing,
+                        onFollowClick = {
+                            showFollowHint = false
+                            if (!accountStore.isLoggedIn) {
+                                showFollowHint = true
+                            } else if (!isFollowing) {
+                                isFollowing = true
+                                val target = card?.hasConcerned == true
+                                scope.launch {
+                                    runCatching {
+                                        repository.setUserFollowed(portrait, follow = !target)
+                                    }
+                                        .onSuccess { result ->
+                                            if (result.success) {
+                                                card = card?.copy(hasConcerned = !target)
+                                                note = if (target) "已取消关注" else "已关注"
+                                            } else {
+                                                note = result.displayMessage
+                                            }
+                                        }
+                                        .onFailure { note = it.message ?: "操作失败" }
+                                    isFollowing = false
+                                }
+                            }
+                        },
                         onMessageClick = { showFollowHint = true },
                     )
                 }
@@ -261,6 +296,7 @@ private fun ProfileCard(
     isLoading: Boolean,
     showFollowHint: Boolean,
     isLoggedIn: Boolean,
+    isFollowing: Boolean,
     onFollowClick: () -> Unit,
     onMessageClick: () -> Unit,
 ) {
@@ -326,9 +362,20 @@ private fun ProfileCard(
             Button(
                 onClick = onFollowClick,
                 modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColorsPrimary(),
+                enabled = !isFollowing,
+                colors = if (card?.hasConcerned == true) {
+                    ButtonDefaults.buttonColors()
+                } else {
+                    ButtonDefaults.buttonColorsPrimary()
+                },
             ) {
-                Text(if (card?.hasConcerned == true) "已关注" else "关注")
+                Text(
+                    when {
+                        isFollowing -> "处理中…"
+                        card?.hasConcerned == true -> "已关注（点击取消）"
+                        else -> "关注"
+                    }
+                )
             }
             Button(
                 onClick = onMessageClick,
@@ -342,7 +389,7 @@ private fun ProfileCard(
             Spacer(Modifier.height(10.dp))
             Text(
                 text = if (isLoggedIn) {
-                    "关注 / 私信功能还没做，这一版先把资料和发言读出来。"
+                    "私信功能还没做，关注按钮可以直接用。"
                 } else {
                     "关注 / 私信需要先登录（设置 → 登录贴吧），当前只能匿名查看。"
                 },
