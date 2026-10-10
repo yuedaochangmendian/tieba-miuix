@@ -32,15 +32,15 @@ object FrsPageProto {
 
     fun pack(params: Params): ByteArray {
         val w = ProtoWriter()
-        w.message(1) { data ->
-            data.string(1, params.kw)
-            data.int32(2, params.rn)
-            data.int32(3, params.rnNeed)
-            data.bool(4, params.isGood)
+        w.message(1) {
+            string(1, params.kw)
+            int32(2, params.rn)
+            int32(3, params.rnNeed)
+            bool(4, params.isGood)
             // pn==1 时置 0，这是 aiotieba 中记录的服务端行为。
-            data.int32(15, if (params.pn == 1) 0 else params.pn)
-            data.message(39) { params.common.writeTo(this) }
-            data.int32(47, params.sortType)
+            int32(15, if (params.pn == 1) 0 else params.pn)
+            message(39) { params.common.writeTo(this) }
+            int32(47, params.sortType)
         }
         return w.toByteArray()
     }

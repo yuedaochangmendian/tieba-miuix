@@ -37,17 +37,17 @@ object PbPageProto {
 
     fun pack(params: Params): ByteArray {
         val w = ProtoWriter()
-        w.message(1) { data ->
-            data.string(4, params.tid.toString())
-            data.bool(5, params.onlyThreadAuthor)
-            data.int32(6, params.sortType)
-            data.int32(13, params.rn)
-            data.int32(18, params.pn)
-            data.message(25) { params.common.writeTo(this) }
+        w.message(1) {
+            string(4, params.tid.toString())
+            bool(5, params.onlyThreadAuthor)
+            int32(6, params.sortType)
+            int32(13, params.rn)
+            int32(18, params.pn)
+            message(25) { params.common.writeTo(this) }
             if (params.withComments) {
-                data.bool(8, true)
-                data.int32(9, params.commentRn)
-                data.int32(74, if (params.commentSortByAgree) 1 else 0)
+                bool(8, true)
+                int32(9, params.commentRn)
+                int32(74, if (params.commentSortByAgree) 1 else 0)
             }
         }
         return w.toByteArray()

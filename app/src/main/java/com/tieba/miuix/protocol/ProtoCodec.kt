@@ -11,7 +11,7 @@ import java.io.ByteArrayOutputStream
  *  -0 Varint       (int32 / int64 / uint32 / uint64 / bool / enum)
  *  -2 Length-delimited (string / bytes / message)
  */
-internal class ProtoWriter(initialCapacity: Int = 256) {
+class ProtoWriter(initialCapacity: Int = 256) {
     private val out = ByteArrayOutputStream(initialCapacity)
 
     fun toByteArray(): ByteArray = out.toByteArray()
@@ -94,7 +94,7 @@ internal class ProtoWriter(initialCapacity: Int = 256) {
 /**
  * 与 [ProtoWriter] 对应的极简 protobuf 读取器。
  */
-internal class ProtoReader(
+class ProtoReader(
     private val buf: ByteArray,
     private var pos: Int = 0,
     private val limit: Int = buf.size,

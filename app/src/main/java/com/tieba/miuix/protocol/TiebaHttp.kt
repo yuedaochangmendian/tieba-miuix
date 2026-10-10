@@ -38,12 +38,13 @@ internal object ProtoHttp {
     @Throws(IOException::class)
     fun post(url: String, payload: ByteArray, userAgent: String = TiebaConst.USER_AGENT): ByteArray {
         val body = MultipartBody.Builder(BOUNDARY)
+            .setType(MultipartBody.FORM)
             .addPart(
-                payload.toRequestBody(null),
                 Headers.headersOf(
                     "Content-Disposition",
                     "form-data; name=\"data\"; filename=\"file\"",
                 ),
+                payload.toRequestBody(null),
             )
             .build()
 
