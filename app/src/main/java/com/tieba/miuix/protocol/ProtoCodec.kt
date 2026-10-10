@@ -101,7 +101,32 @@ class ProtoReader(
 ) {
     val hasMore: Boolean get() = pos < limit
 
+    /** 真实读取位置（诊断用）。 */
+    fun position(): Int = pos
+
     fun readTag(): Int = readVarint().toInt()
+
+    /**
+     * 跳过当前字段的值。
+     *
+     * 长度分隔字段用「先读长度、再按长度推进位置」的显式写法，
+     * 不写成 `pos += readVarint()`——那样会让「读长度本身消耗的 1 字节」
+     * 与「加上长度值」重复计算，落点比正确位置少 1 字节，
+     * 从而让后续所有嵌套消息的起点偏移。实测：[0x0A, 0x3D, <61 字节>, 0x12]
+     * 上 `skip(2)` 必须落到 63（即 61 字节负载之后、下一个 tag 之前）。
+     */
+    fun skip(wireType: Int) {
+        when (wireType) {
+            ProtoWriter.WIRE_VARINT -> readVarint()
+            ProtoWriter.WIRE_FIXED64 -> pos = (pos + 8).coerceAtMost(limit)
+            ProtoWriter.WIRE_LENGTH_DELIMITED -> {
+                val len = readVarint().toInt()
+                pos = (pos + len).coerceAtMost(limit)
+            }
+            ProtoWriter.WIRE_FIXED32 -> pos = (pos + 4).coerceAtMost(limit)
+            else -> pos = limit
+        }
+    }
 
     fun readVarint(): Long {
         var result = 0L
@@ -150,16 +175,6 @@ class ProtoReader(
         val sub = ProtoReader(buf, pos, end)
         pos = end
         return sub
-    }
-
-    fun skip(wireType: Int) {
-        when (wireType) {
-            ProtoWriter.WIRE_VARINT -> readVarint()
-            ProtoWriter.WIRE_FIXED64 -> pos += 8
-            ProtoWriter.WIRE_LENGTH_DELIMITED -> pos += readVarint().toInt()
-            ProtoWriter.WIRE_FIXED32 -> pos += 4
-            else -> pos = limit
-        }
     }
 
     companion object {

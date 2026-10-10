@@ -84,14 +84,17 @@ import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
-/** 底部导航的入口。 */
+/** 底部导航的入口（只留四个主入口，收藏 / 历史 / 设置收进「我的」）。 */
 private const val TAB_HOME = 0
 private const val TAB_MESSAGES = 1
 private const val TAB_SEARCH = 2
 private const val TAB_PROFILE = 3
-private const val TAB_FAVORITES = 4
-private const val TAB_HISTORY = 5
-private const val TAB_SETTINGS = 6
+
+/** 「我的」里可以点开的二级页面。 */
+private const val PROFILE_PAGE_NONE = 0
+private const val PROFILE_PAGE_FAVORITES = 1
+private const val PROFILE_PAGE_HISTORY = 2
+private const val PROFILE_PAGE_SETTINGS = 3
 /**
  * 唯一的 Activity。
  *
@@ -149,6 +152,7 @@ private fun TiebaApp(app: TiebaApplication) {
     val context = LocalContext.current
 
     var selectedTab by rememberSaveable { mutableIntStateOf(TAB_HOME) }
+    var profilePage by rememberSaveable { mutableIntStateOf(PROFILE_PAGE_NONE) }
     var keyword by rememberSaveable { mutableStateOf("") }
     var loginNote by remember { mutableStateOf("") }
 
@@ -184,8 +188,6 @@ private fun TiebaApp(app: TiebaApplication) {
             BottomTab("消息", MiuixIcons.Messages, TAB_MESSAGES),
             BottomTab("搜索", MiuixIcons.Search, TAB_SEARCH),
             BottomTab("我的", MiuixIcons.Favorites, TAB_PROFILE),
-            BottomTab("历史", MiuixIcons.Recent, TAB_HISTORY),
-            BottomTab("设置", MiuixIcons.Settings, TAB_SETTINGS),
         )
     }
     val bottomPadding = 72.dp
@@ -205,6 +207,44 @@ private fun TiebaApp(app: TiebaApplication) {
         LocalRequestLogin provides requestLogin,
         LocalLoginNote provides loginNote,
     ) {
+        if (profilePage != PROFILE_PAGE_NONE) {
+            // 「我的」里的二级页面：铺满整屏，底栏让位，返回键回到「我的」。
+            BackHandler { profilePage = PROFILE_PAGE_NONE }
+            when (profilePage) {
+                PROFILE_PAGE_FAVORITES -> FavoritesPage(
+                    bottomPadding = 16.dp,
+                    onOpenThread = { tid, title, forumName ->
+                        context.startActivity(
+                            ThreadDetailActivity.intent(context, tid, title, forumName),
+                        )
+                    },
+                    onOpenForum = { name ->
+                        context.startActivity(ForumDetailActivity.intent(context, name))
+                    },
+                )
+
+                PROFILE_PAGE_HISTORY -> HistoryPage(
+                    bottomPadding = 16.dp,
+                    onOpenThread = { record ->
+                        context.startActivity(
+                            ThreadDetailActivity.intent(
+                                context,
+                                record.tid,
+                                record.title,
+                                record.forumName,
+                            ),
+                        )
+                    },
+                    onOpenForum = { name ->
+                        context.startActivity(ForumDetailActivity.intent(context, name))
+                    },
+                )
+
+                else -> SettingsPage(bottomPadding = 16.dp)
+            }
+            return@CompositionLocalProvider
+        }
+
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(1f)) {
                 when (selectedTab) {
@@ -238,18 +278,6 @@ private fun TiebaApp(app: TiebaApplication) {
                         },
                     )
 
-                    TAB_FAVORITES -> FavoritesPage(
-                        bottomPadding = bottomPadding,
-                        onOpenThread = { tid, title, forumName ->
-                            context.startActivity(
-                                ThreadDetailActivity.intent(context, tid, title, forumName),
-                            )
-                        },
-                        onOpenForum = { name ->
-                            context.startActivity(ForumDetailActivity.intent(context, name))
-                        },
-                    )
-
                     TAB_PROFILE -> ProfilePage(
                         bottomPadding = bottomPadding,
                         onOpenForum = { name ->
@@ -260,30 +288,11 @@ private fun TiebaApp(app: TiebaApplication) {
                                 ThreadDetailActivity.intent(context, tid, title, forumName),
                             )
                         },
-                        onOpenSettings = { selectedTab = TAB_SETTINGS },
-                        onOpenHistory = { selectedTab = TAB_HISTORY },
+                        onOpenSettings = { profilePage = PROFILE_PAGE_SETTINGS },
+                        onOpenHistory = { profilePage = PROFILE_PAGE_HISTORY },
                         onOpenSearchHistory = { selectedTab = TAB_SEARCH },
-                        onOpenFavorites = { selectedTab = TAB_FAVORITES },
+                        onOpenFavorites = { profilePage = PROFILE_PAGE_FAVORITES },
                     )
-
-                    TAB_HISTORY -> HistoryPage(
-                        bottomPadding = bottomPadding,
-                        onOpenThread = { record ->
-                            context.startActivity(
-                                ThreadDetailActivity.intent(
-                                    context,
-                                    record.tid,
-                                    record.title,
-                                    record.forumName,
-                                ),
-                            )
-                        },
-                        onOpenForum = { name ->
-                            context.startActivity(ForumDetailActivity.intent(context, name))
-                        },
-                    )
-
-                    TAB_SETTINGS -> SettingsPage(bottomPadding = bottomPadding)
 
                     else -> HomeFeedPage(
                         repository = repository,

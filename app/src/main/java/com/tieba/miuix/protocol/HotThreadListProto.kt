@@ -18,6 +18,9 @@ package com.tieba.miuix.protocol
  * first_post_content=21/112/142, thread_type=26, fid=27, fname=28,
  * first_post_id=40, create_time=45, author_id=56, ...`），
  * 所以直接复用 [ThreadInfo.parse]。
+ *
+ * 注意：解析依赖 [ProtoReader.skip] 对 length-delimited 字段的正确落点，
+ * 之前 `skip` 少推进 1 字节会让 `data` 子消息整体错位、`thread_info` 一条都取不到。
  */
 object HotThreadListProto {
 
@@ -44,27 +47,36 @@ object HotThreadListProto {
     }
 
     fun parse(bytes: ByteArray): Response {
-        val r = ProtoReader.of(bytes)
+        val reader = ProtoReader.of(bytes)
         var error = TiebaError()
         val threads = ArrayList<ThreadInfo>()
-        while (r.hasMore) {
-            val tag = r.readTag()
+        var loopGuard = 0
+        while (reader.hasMore) {
+            if (++loopGuard > MAX_FIELDS) break
+            val tag = reader.readTag()
             when (tag ushr 3) {
-                1 -> error = TiebaError.parse(r.readMessage())
-                2 -> {
-                    val data = r.readMessage()
-                    while (data.hasMore) {
-                        val t = data.readTag()
-                        when (t ushr 3) {
-                            // topic_list（1）与 hot_thread_tab_info（3）暂未使用。
-                            2 -> threads += ThreadInfo.parse(data.readMessage())
-                            else -> data.skip(t and 7)
-                        }
-                    }
-                }
-                else -> r.skip(tag and 7)
+                1 -> error = TiebaError.parse(reader.readMessage())
+                2 -> readData(reader.readMessage(), threads)
+                else -> reader.skip(tag and 7)
             }
         }
         return Response(error, threads)
     }
+
+    /** 解析 `HotThreadListResponseData`，只取 `thread_info`（字段 2）。 */
+    private fun readData(data: ProtoReader, out: MutableList<ThreadInfo>) {
+        var loopGuard = 0
+        while (data.hasMore) {
+            if (++loopGuard > MAX_FIELDS) break
+            val tag = data.readTag()
+            when (tag ushr 3) {
+                // topic_list（1）与 hot_thread_tab_info（3）暂未使用。
+                2 -> out += ThreadInfo.parse(data.readMessage())
+                else -> data.skip(tag and 7)
+            }
+        }
+    }
+
+    /** 单个响应最多几十个字段，防御性上限，避免解析器异常时空转。 */
+    private const val MAX_FIELDS = 4096
 }
