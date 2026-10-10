@@ -144,6 +144,14 @@ data class UserSearchItem(
 ) {
     val displayName: String get() = nameShow.ifEmpty { name }
 
+    /** 按设置决定是否同时显示用户名与昵称。 */
+    fun displayNameWith(showBoth: Boolean): String =
+        if (showBoth && name.isNotEmpty() && nameShow.isNotEmpty() && name != nameShow) {
+            "$name（$nameShow）"
+        } else {
+            displayName
+        }
+
     val portraitUrl: String
         get() = when {
             portrait.isEmpty() -> ""

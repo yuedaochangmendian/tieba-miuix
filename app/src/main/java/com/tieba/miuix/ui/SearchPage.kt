@@ -377,6 +377,7 @@ private fun UserResultList(
     bottomPadding: Dp,
 ) {
     val context = LocalContext.current
+    val showBothName = currentSettings.showBothNameAndNickname
     if (!searched) {
         CenterHint(text = "输入关键词后可以搜吧、搜帖、搜用户")
         return
@@ -413,7 +414,7 @@ private fun UserResultList(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = item.displayName,
+                            text = item.displayNameWith(showBothName),
                             style = MiuixTheme.textStyles.body1,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,

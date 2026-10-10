@@ -179,6 +179,19 @@ data class User(
     /** 用于展示的名字（优先展示昵称）。 */
     val displayName: String get() = nameShow.ifEmpty { name }
 
+    /**
+     * 按设置决定展示名。
+     *
+     * [showBoth] 为真且这个用户既有用户名又有昵称时，展示成「用户名（昵称）」，
+     * 对应设置里的「同时显示用户名与昵称」；否则等价于 [displayName]。
+     */
+    fun displayNameWith(showBoth: Boolean): String =
+        if (showBoth && name.isNotEmpty() && nameShow.isNotEmpty() && name != nameShow) {
+            "$name（$nameShow）"
+        } else {
+            displayName
+        }
+
     /** 头像的远程地址；为空时 UI 会退化为文字头像。 */
     val portraitUrl: String
         get() = when {
@@ -442,6 +455,14 @@ data class ThreadInfo(
     val firstPostContent: List<PbContent> = emptyList(),
 ) {
     val authorName: String get() = author?.displayName ?: ""
+
+    /**
+     * 帖子作者名，按设置决定是否同时显示用户名与昵称。
+     *
+     * 拿不到作者对象（例如吧详情里只有昵称字符串）时回退到 [authorName]。
+     */
+    fun authorName(showBoth: Boolean): String =
+        (author?.displayNameWith(showBoth) ?: authorName).ifBlank { "匿名用户" }
 
     companion object {
         fun parse(r: ProtoReader): ThreadInfo {

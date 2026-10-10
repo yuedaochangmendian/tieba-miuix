@@ -663,6 +663,7 @@ private fun PostCard(
 ) {
     val images = post.content.toImages()
     val context = LocalContext.current
+    val showBothName = currentSettings.showBothNameAndNickname
 
     Card(
         modifier = Modifier
@@ -673,7 +674,8 @@ private fun PostCard(
         colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceContainer),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            val authorName = post.authorName.ifBlank { "匿名用户" }
+            val authorName = post.author?.displayNameWith(showBothName)
+                ?.ifBlank { "匿名用户" } ?: "匿名用户"
             val portrait = post.author?.portrait.orEmpty()
             val authorUid = post.authorId.takeIf { it > 0L } ?: post.author?.id ?: 0L
             Text(
@@ -811,9 +813,11 @@ private fun PostCard(
 @Composable
 private fun SubPostItem(sub: SubPostList, onReply: (SubPostList) -> Unit) {
     val context = LocalContext.current
+    val showBothName = currentSettings.showBothNameAndNickname
     val portrait = sub.author?.portrait.orEmpty()
     val uid = sub.authorId.takeIf { it > 0L } ?: sub.author?.id ?: 0L
-    val authorName = sub.author?.displayName?.ifBlank { "匿名用户" } ?: "匿名用户"
+    val authorName = sub.author?.displayNameWith(showBothName)?.ifBlank { "匿名用户" }
+        ?: "匿名用户"
     Column(
         modifier = Modifier
             .fillMaxWidth()

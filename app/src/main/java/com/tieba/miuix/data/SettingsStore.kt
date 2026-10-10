@@ -33,6 +33,17 @@ object ImageLoadMode {
 }
 
 /**
+ * 帖子列表的展示形态，对齐 TiebaLite 的 `listSingle`。
+ */
+object ThreadListMode {
+    /** 卡片：每层楼是一张卡片，信息更全。 */
+    const val CARD = 0
+
+    /** 单行：一行一条，一屏能看更多帖子（默认）。 */
+    const val SINGLE = 1
+}
+
+/**
  * 应用设置。
  *
  * 全部字段都通过 [SettingsStore] 持久化到 SharedPreferences，并且是
@@ -49,6 +60,7 @@ class Settings(
     recordHistory: Boolean,
     homeShowRecentForum: Boolean,
     forumFabAction: String,
+    threadListMode: Int,
 ) {
     var darkMode by mutableStateOf(darkMode)
     var fontSizeLevel by mutableStateOf(fontSizeLevel)
@@ -59,6 +71,7 @@ class Settings(
     var recordHistory by mutableStateOf(recordHistory)
     var homeShowRecentForum by mutableStateOf(homeShowRecentForum)
     var forumFabAction by mutableStateOf(forumFabAction)
+    var threadListMode by mutableStateOf(threadListMode)
 }
 
 /**
@@ -81,6 +94,7 @@ class SettingsStore(context: Context) {
         recordHistory = prefs.getBoolean(KEY_RECORD_HISTORY, true),
         homeShowRecentForum = prefs.getBoolean(KEY_HOME_RECENT_FORUM, true),
         forumFabAction = prefs.getString(KEY_FAB_ACTION, FAB_REFRESH) ?: FAB_REFRESH,
+        threadListMode = prefs.getInt(KEY_LIST_MODE, ThreadListMode.CARD),
     )
 
     fun setDarkMode(value: Int) {
@@ -128,6 +142,11 @@ class SettingsStore(context: Context) {
         prefs.edit().putString(KEY_FAB_ACTION, value).apply()
     }
 
+    fun setThreadListMode(value: Int) {
+        settings.threadListMode = value
+        prefs.edit().putInt(KEY_LIST_MODE, value).apply()
+    }
+
     /** 当前字号倍率。 */
     val fontScale: Float get() = FONT_SCALE[settings.fontSizeLevel.coerceIn(0, FONT_SCALE.size - 1)]
 
@@ -142,6 +161,7 @@ class SettingsStore(context: Context) {
         private const val KEY_RECORD_HISTORY = "record_history"
         private const val KEY_HOME_RECENT_FORUM = "home_page_show_history_forum"
         private const val KEY_FAB_ACTION = "forum_fab_function"
+        private const val KEY_LIST_MODE = "list_single"
 
         /** 浮动按钮的行为。 */
         const val FAB_REFRESH = "refresh"

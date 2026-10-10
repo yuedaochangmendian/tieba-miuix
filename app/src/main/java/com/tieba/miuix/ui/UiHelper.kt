@@ -8,6 +8,7 @@ import com.tieba.miuix.data.DarkMode
 import com.tieba.miuix.data.ImageLoadMode
 import com.tieba.miuix.data.Settings
 import com.tieba.miuix.data.SettingsStore
+import com.tieba.miuix.data.ThreadListMode
 import com.tieba.miuix.protocol.TiebaConst.ThreadSortType
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -44,6 +45,17 @@ val FAB_OPTIONS: List<Pair<String, String>> = listOf(
     "回到顶部" to SettingsStore.FAB_BACK_TO_TOP,
     "隐藏" to SettingsStore.FAB_NONE,
 )
+
+/** 帖子列表的展示形态。 */
+val THREAD_LIST_MODE_OPTIONS: List<Pair<String, Int>> = listOf(
+    "单行" to ThreadListMode.SINGLE,
+    "卡片" to ThreadListMode.CARD,
+)
+
+/** 把设置里的列表形态翻译成界面文案。 */
+fun threadListModeLabel(value: Int): String =
+    THREAD_LIST_MODE_OPTIONS.firstOrNull { it.second == value }?.first
+        ?: THREAD_LIST_MODE_OPTIONS.first().first
 
 /** 把设置里的深色模式取值翻译成界面文案。 */
 fun darkModeLabel(value: Int): String =

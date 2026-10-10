@@ -150,6 +150,12 @@ fun SettingsPage(bottomPadding: androidx.compose.ui.unit.Dp) {
                         onSelected = { settingsStore.setDefaultThreadSort(it) },
                     )
                     ChoiceRow(
+                        title = "帖子列表",
+                        options = THREAD_LIST_MODE_OPTIONS,
+                        selected = settings.threadListMode,
+                        onSelected = { settingsStore.setThreadListMode(it) },
+                    )
+                    ChoiceRow(
                         title = "悬浮按钮",
                         options = FAB_OPTIONS,
                         selected = settings.forumFabAction,
@@ -157,7 +163,7 @@ fun SettingsPage(bottomPadding: androidx.compose.ui.unit.Dp) {
                     )
                     SwitchRow(
                         title = "同时显示用户名与昵称",
-                        summary = "关闭后只显示昵称",
+                        summary = "关闭后只显示昵称；页面里同时带用户名与昵称的才生效",
                         checked = settings.showBothNameAndNickname,
                         onCheckedChange = { settingsStore.setShowBothNameAndNickname(it) },
                     )

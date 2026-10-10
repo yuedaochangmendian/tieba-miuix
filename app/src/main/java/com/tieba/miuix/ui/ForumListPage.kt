@@ -4,6 +4,7 @@
 package com.tieba.miuix.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -35,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tieba.miuix.data.ThreadListMode
 import com.tieba.miuix.data.TiebaRepository
 import com.tieba.miuix.protocol.ForumHome
 import com.tieba.miuix.protocol.ForumSearchItem
@@ -100,6 +102,7 @@ fun ForumListPage(
     var actionThread by remember { mutableStateOf<ThreadInfo?>(null) }
     var note by remember { mutableStateOf("") }
     var forumSuggestions by remember { mutableStateOf<List<ForumSearchItem>>(emptyList()) }
+    val searchHistoryStore = LocalSearchHistoryStore.current
 
     // 输入吧名时给候选列表：打错一个字就进不去吧，这里直接让用户从候选里挑。
     LaunchedEffect(keyword, forumName) {
@@ -224,6 +227,7 @@ fun ForumListPage(
                             keyword = trimmed
                             onKeywordChange(trimmed)
                             if (trimmed != forumName) forumName = trimmed
+                            if (trimmed.isNotEmpty()) searchHistoryStore.add(trimmed)
                         },
                         suggestions = forumSuggestions,
                         onPickSuggestion = { picked ->
@@ -231,6 +235,18 @@ fun ForumListPage(
                             onKeywordChange(picked.name)
                             forumName = picked.name
                             forumSuggestions = emptyList()
+                            searchHistoryStore.add(picked.name)
+                        },
+                        history = if (forumName.isBlank()) {
+                            searchHistoryStore.keywords.take(8)
+                        } else {
+                            emptyList()
+                        },
+                        onPickHistory = { picked ->
+                            keyword = picked
+                            onKeywordChange(picked)
+                            forumName = picked
+                            searchHistoryStore.add(picked)
                         },
                     )
                 }
@@ -297,11 +313,19 @@ fun ForumListPage(
 
                 items(items = threads, key = { it.id }) { thread ->
                     Box(modifier = Modifier.padding(bottom = 10.dp)) {
-                        ThreadCard(
-                            thread = thread,
-                            onClick = { onOpenThread(thread.id, thread.title, forumName) },
-                            onLongClick = { actionThread = thread },
-                        )
+                        if (settings.threadListMode == ThreadListMode.SINGLE) {
+                            ThreadRow(
+                                thread = thread,
+                                onClick = { onOpenThread(thread.id, thread.title, forumName) },
+                                onLongClick = { actionThread = thread },
+                            )
+                        } else {
+                            ThreadCard(
+                                thread = thread,
+                                onClick = { onOpenThread(thread.id, thread.title, forumName) },
+                                onLongClick = { actionThread = thread },
+                            )
+                        }
                     }
                 }
 
@@ -354,6 +378,8 @@ private fun SearchCard(
     onSubmit: () -> Unit,
     suggestions: List<ForumSearchItem> = emptyList(),
     onPickSuggestion: (ForumSearchItem) -> Unit = {},
+    history: List<String> = emptyList(),
+    onPickHistory: (String) -> Unit = {},
 ) {
     Card(
         modifier = Modifier
@@ -418,6 +444,29 @@ private fun SearchCard(
                 }
             }
         }
+        if (history.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(items = history, key = { it }) { item ->
+                    Card(
+                        cornerRadius = 12.dp,
+                        insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        colors = CardDefaults.defaultColors(
+                            color = MiuixTheme.colorScheme.surfaceContainerHigh,
+                        ),
+                        pressFeedbackType = PressFeedbackType.Sink,
+                        showIndication = true,
+                        onClick = { onPickHistory(item) },
+                    ) {
+                        Text(
+                            text = item,
+                            style = MiuixTheme.textStyles.footnote2,
+                            color = MiuixTheme.colorScheme.onSurfaceContainerHigh,
+                        )
+                    }
+                }
+            }
+        }
         Spacer(modifier = Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             SORT_OPTIONS.forEach { option ->
@@ -453,11 +502,70 @@ private fun SearchCard(
 }
 
 @Composable
+private fun ThreadRow(
+    thread: ThreadInfo,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
+) {
+    val showBothName = currentSettings.showBothNameAndNickname
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 12.dp,
+        insideMargin = PaddingValues(horizontal = 14.dp, vertical = 11.dp),
+        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceContainer),
+        pressFeedbackType = PressFeedbackType.Sink,
+        showIndication = true,
+        onClick = onClick,
+        onLongPress = onLongClick,
+    ) {
+        Text(
+            text = thread.title.ifBlank { "（无标题）" },
+            style = MiuixTheme.textStyles.body1,
+            color = MiuixTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (thread.isGood) {
+                Text(
+                    text = "精",
+                    style = MiuixTheme.textStyles.footnote2,
+                    color = MiuixTheme.colorScheme.onPrimary,
+                    modifier = Modifier
+                        .background(
+                            color = MiuixTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(4.dp),
+                        )
+                        .padding(horizontal = 5.dp, vertical = 1.dp),
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+            Text(
+                text = thread.authorName(showBothName),
+                modifier = Modifier.weight(1f, fill = false),
+                style = MiuixTheme.textStyles.footnote2,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = thread.replyNum.toString() + " 回复",
+                style = MiuixTheme.textStyles.footnote2,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+        }
+    }
+}
+
+@Composable
 private fun ThreadCard(
     thread: ThreadInfo,
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
 ) {
+    val showBothName = currentSettings.showBothNameAndNickname
     Card(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 12.dp,
@@ -503,7 +611,7 @@ private fun ThreadCard(
                 Spacer(modifier = Modifier.width(6.dp))
             }
             Text(
-                text = thread.authorName.ifBlank { "匿名用户" },
+                text = thread.authorName(showBothName),
                 modifier = Modifier.weight(1f, fill = false),
                 style = MiuixTheme.textStyles.footnote2,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
