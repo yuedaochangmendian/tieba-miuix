@@ -4,10 +4,12 @@ package com.tieba.miuix.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.tieba.miuix.data.AccountStore
 import com.tieba.miuix.data.HistoryStore
 import com.tieba.miuix.data.SearchHistoryStore
 import com.tieba.miuix.data.Settings
 import com.tieba.miuix.data.SettingsStore
+import com.tieba.miuix.data.TiebaRepository
 
 /**
  * 全局依赖的传递方式。
@@ -20,6 +22,14 @@ val LocalSettingsStore = staticCompositionLocalOf<SettingsStore> {
     error("LocalSettingsStore 尚未提供，请在 MainActivity 的 setContent 里 provide")
 }
 
+val LocalAccountStore = staticCompositionLocalOf<AccountStore> {
+    error("LocalAccountStore 尚未提供，请在 MainActivity 的 setContent 里 provide")
+}
+
+val LocalRepository = staticCompositionLocalOf<TiebaRepository> {
+    error("LocalRepository 尚未提供，请在 MainActivity 的 setContent 里 provide")
+}
+
 val LocalHistoryStore = staticCompositionLocalOf<HistoryStore> {
     error("LocalHistoryStore 尚未提供，请在 MainActivity 的 setContent 里 provide")
 }
@@ -27,6 +37,20 @@ val LocalHistoryStore = staticCompositionLocalOf<HistoryStore> {
 val LocalSearchHistoryStore = staticCompositionLocalOf<SearchHistoryStore> {
     error("LocalSearchHistoryStore 尚未提供，请在 MainActivity 的 setContent 里 provide")
 }
+
+/**
+ * 触发登录流程。
+ *
+ * 登录要启动 [LoginActivity] 并等它的返回值，而返回值的处理在 Activity 层，
+ * 所以这里只放一个「请求登录」的回调；`MainActivity` 在最外层 provide。
+ * 默认值是空实现——测试或预览环境里点了没反应，总好过直接抛异常。
+ */
+val LocalRequestLogin = staticCompositionLocalOf<() -> Unit> { {} }
+
+/**
+ * 登录相关的临时提示，由 `MainActivity` 在登录流程结束后写入，设置页展示。
+ */
+val LocalLoginNote = staticCompositionLocalOf { "" }
 
 /**
  * 当前设置快照。

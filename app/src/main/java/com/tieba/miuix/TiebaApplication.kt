@@ -13,7 +13,7 @@ import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
-import com.tieba.miuix.data.Credentials
+import com.tieba.miuix.data.AccountStore
 import com.tieba.miuix.data.HistoryStore
 import com.tieba.miuix.data.SearchHistoryStore
 import com.tieba.miuix.data.SettingsStore
@@ -25,7 +25,8 @@ import java.util.concurrent.TimeUnit
  * 应用入口。
  *
  * 全局持有仓库与各个 Store，供所有页面共享：
- *  - [repository]：接口访问（当前是匿名浏览，[Credentials] 全空）；
+ *  - [accountStore]：登录凭证（BDUSS / STOKEN / tbs）；
+ *  - [repository]：接口访问，凭证从 [accountStore] 动态读取，登录后无需重建；
  *  - [settingsStore]：应用设置；
  *  - [historyStore]：浏览历史；
  *  - [searchHistoryStore]：搜索历史。
@@ -35,8 +36,10 @@ import java.util.concurrent.TimeUnit
  */
 class TiebaApplication : Application(), SingletonImageLoader.Factory {
 
+    val accountStore: AccountStore by lazy { AccountStore(this) }
+
     val repository: TiebaRepository by lazy {
-        TiebaRepository(Credentials())
+        TiebaRepository { accountStore.credentials() }
     }
 
     val settingsStore: SettingsStore by lazy { SettingsStore(this) }

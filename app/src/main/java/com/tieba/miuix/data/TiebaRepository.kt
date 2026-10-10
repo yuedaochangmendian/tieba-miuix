@@ -5,7 +5,7 @@ package com.tieba.miuix.data
 import com.tieba.miuix.protocol.CommonReq
 import com.tieba.miuix.protocol.ForumSearchResult
 import com.tieba.miuix.protocol.FrsPageProto
-import com.tieba.miuix.protocol.ForumSearchPostItem
+import com.tieba.miuix.protocol.ForumSearchPostResult
 import com.tieba.miuix.protocol.PbPageProto
 import com.tieba.miuix.protocol.TiebaConst.PostSortType
 import com.tieba.miuix.protocol.ProtoHttp
@@ -30,11 +30,18 @@ data class Credentials(
 /**
  * 贴吧数据仓库：把 UI 的调用翻译成具体的接口请求。
  *
- * 这里只复刻了两个"只读"接口，足以支撑「浏览吧内帖子 → 查看帖子楼层」的核心流程。
+ * 凭证是**动态读取**的（[credentialsProvider]）：登录、退出、补取 tbs 之后
+ * 不需要重建仓库，下一次请求自动带上新凭证。
  */
 class TiebaRepository(
-    private val credentials: Credentials = Credentials(),
+    private val credentialsProvider: () -> Credentials = { Credentials() },
 ) {
+
+    /** 当前凭证快照。 */
+    val credentials: Credentials get() = credentialsProvider()
+
+    /** 是否已登录。 */
+    val isLoggedIn: Boolean get() = credentials.isLoggedIn
 
     /** 加载某个吧的主题帖列表。 */
     suspend fun getThreads(
@@ -44,6 +51,7 @@ class TiebaRepository(
         sortType: Int = ThreadSortType.REPLY,
         isGood: Boolean = false,
     ): FrsPageProto.Response = withContext(Dispatchers.IO) {
+        val credentials = credentialsProvider()
         val safeRn = rn.coerceIn(1, 100)
         val common = CommonReq(
             clientVersion = TiebaConst.LEGACY_VERSION,
@@ -75,6 +83,7 @@ class TiebaRepository(
         onlyThreadAuthor: Boolean = false,
         withComments: Boolean = false,
     ): PbPageProto.Response = withContext(Dispatchers.IO) {
+        val credentials = credentialsProvider()
         val safeRn = rn.coerceIn(2, 30)
         val common = CommonReq(
             clientVersion = TiebaConst.LATEST_VERSION,
@@ -178,6 +187,7 @@ class TiebaRepository(
      * 吧内搜索（APP 表单端 `POST /c/s/searchpost`）。
      *
      * 与全吧搜索不同，这个接口返回的是帖子（楼层），字段形态也不同。
+     * 实测响应把 `post_list` 与 `page` 平铺在顶层。
      */
     suspend fun searchPostInForum(
         keyword: String,
@@ -186,8 +196,8 @@ class TiebaRepository(
         rn: Int = TiebaConst.DEFAULT_POST_PAGE_SIZE,
         onlyThread: Boolean = false,
         searchType: Int = 1,
-    ): List<ForumSearchPostItem> = withContext(Dispatchers.IO) {
-        if (keyword.isBlank() || forumName.isBlank()) return@withContext emptyList()
+    ): ForumSearchPostResult = withContext(Dispatchers.IO) {
+        if (keyword.isBlank() || forumName.isBlank()) return@withContext ForumSearchPostResult()
         val json = WebHttp.postFormJson(
             host = TiebaConst.APP_BASE_HOST,
             path = "/c/s/searchpost",
@@ -201,12 +211,58 @@ class TiebaRepository(
                 "word" to keyword,
             ),
         )
-        val items = ArrayList<ForumSearchPostItem>()
-        json.optJSONArray("post_list")?.let { array ->
-            for (i in 0 until array.length()) {
-                array.optJSONObject(i)?.let { items.add(ForumSearchPostItem.parse(it)) }
-            }
-        }
-        items
+        ForumSearchPostResult.parse(json)
     }
+
+    // ---------------------------------------------------------------- 登录
+
+    /**
+     * 取 `tbs`（写操作令牌）。
+     *
+     * 登录后必须单独取一次：只带 BDUSS 能读不能写，发帖/回复/签到都会被拒。
+     * 先试客户端通道 `/dc/common/tbs`（返回 JSON），再回落网页通道
+     * `/dc/common/tbs`（返回 HTML，值是 `tbs` 的字符串），两者都解析不到就
+     * 返回空串，由调用方提示用户。
+     */
+    suspend fun fetchTbs(): String = withContext(Dispatchers.IO) {
+        val current = credentialsProvider()
+        if (!current.isLoggedIn) return@withContext ""
+        val cookie = "BDUSS=${current.bduss}" +
+            if (current.stoken.isNotEmpty()) "; STOKEN=${current.stoken}" else ""
+
+        val candidates = listOf(
+            Triple(
+                "http://${TiebaConst.APP_BASE_HOST}/dc/common/tbs?t=${System.currentTimeMillis()}",
+                TiebaConst.USER_AGENT,
+                null,
+            ),
+            Triple(
+                "https://${TiebaConst.WEB_BASE_HOST}/dc/common/tbs",
+                TiebaConst.WEB_USER_AGENT,
+                "https://${TiebaConst.WEB_BASE_HOST}/",
+            ),
+        )
+        for ((url, ua, referer) in candidates) {
+            val text = runCatching { ProtoHttp.getText(url, cookie, ua, referer) }.getOrNull()
+            val tbs = text?.let { extractTbs(it) }.orEmpty()
+            if (tbs.isNotEmpty()) return@withContext tbs
+        }
+        ""
+    }
+}
+
+/**
+ * 从响应里抠出 `tbs` 的值。
+ *
+ * 实测两种形态都要兼容：JSON 的 `{"tbs":"..."}` 与 HTML/JS 里的 `tbs = '...'`。
+ */
+internal fun extractTbs(body: String): String {
+    if (body.isEmpty()) return ""
+    Regex("""["']tbs["']\s*[:=]\s*["']([0-9a-zA-Z]{10,})["']""")
+        .find(body)
+        ?.let { return it.groupValues[1] }
+    Regex("""tbs\s*[:=]\s*["']([0-9a-zA-Z]{10,})["']""")
+        .find(body)
+        ?.let { return it.groupValues[1] }
+    return ""
 }

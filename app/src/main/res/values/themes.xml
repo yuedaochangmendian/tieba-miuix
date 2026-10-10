@@ -3,4 +3,17 @@
     <style name="Theme.TiebaMiuix" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@android:color/white</item>
     </style>
+
+    <!--
+      登录页：`Theme.DeviceDefault.DayNight.NoActionBar` 在纯 framework 主题里
+      不存在（DayNight 是 AppCompat/Material 才有的），所以这里用浅色版本，
+      深色系统下的实际配色由 LoginActivity 判断 night 配置后 setTheme 覆盖。
+    -->
+    <style name="Theme.TiebaMiuix.Login" parent="android:Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+
+    <style name="Theme.TiebaMiuix.Login.Dark" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">#FF141414</item>
+    </style>
 </resources>

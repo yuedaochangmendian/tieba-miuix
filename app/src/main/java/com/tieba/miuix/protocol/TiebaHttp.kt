@@ -62,4 +62,32 @@ internal object ProtoHttp {
             return response.body?.bytes() ?: ByteArray(0)
         }
     }
+
+    /**
+     * 取一段纯文本，用于 `/dc/common/tbs` 这类返回 JSON 或 HTML 的小接口。
+     *
+     * `Cookie` 头只在 [cookie] 非空时附带，方便匿名与登录两种场景复用。
+     */
+    @Throws(IOException::class)
+    fun getText(
+        url: String,
+        cookie: String = "",
+        userAgent: String = TiebaConst.WEB_USER_AGENT,
+        referer: String? = null,
+    ): String {
+        val builder = Request.Builder()
+            .url(url)
+            .header("User-Agent", userAgent)
+            .header("Accept", "application/json, text/plain, */*")
+            .header("Accept-Encoding", "gzip, deflate")
+        if (cookie.isNotEmpty()) builder.header("Cookie", cookie)
+        if (!referer.isNullOrEmpty()) builder.header("Referer", referer)
+
+        client.newCall(builder.get().build()).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IOException("贴吧接口返回 HTTP ${response.code}")
+            }
+            return response.body?.string().orEmpty()
+        }
+    }
 }

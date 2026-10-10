@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">贴吧 Miuix</string>
+    <string name="login_title">登录贴吧</string>
 </resources>

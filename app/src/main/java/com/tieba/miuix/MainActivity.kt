@@ -3,14 +3,18 @@
 
 package com.tieba.miuix
 
+import android.app.Activity
+import android.content.Intent
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,22 +35,30 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.tieba.miuix.data.TiebaRepository
 import com.tieba.miuix.ui.ForumListPage
 import com.tieba.miuix.ui.HistoryPage
+import com.tieba.miuix.ui.LocalAccountStore
 import com.tieba.miuix.ui.LocalHistoryStore
+import com.tieba.miuix.ui.LocalLoginNote
+import com.tieba.miuix.ui.LocalRequestLogin
+import com.tieba.miuix.ui.LocalRepository
 import com.tieba.miuix.ui.LocalSearchHistoryStore
 import com.tieba.miuix.ui.LocalSettingsStore
+import com.tieba.miuix.ui.LoginActivity
 import com.tieba.miuix.ui.SearchPage
 import com.tieba.miuix.ui.SettingsPage
 import com.tieba.miuix.ui.ThreadDetailPage
 import com.tieba.miuix.ui.theme.TiebaTheme
+import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
@@ -98,6 +110,8 @@ class MainActivity : ComponentActivity() {
                     LocalSettingsStore provides app.settingsStore,
                     LocalHistoryStore provides app.historyStore,
                     LocalSearchHistoryStore provides app.searchHistoryStore,
+                    LocalAccountStore provides app.accountStore,
+                    LocalRepository provides app.repository,
                 ) {
                     TiebaApp(app)
                 }
@@ -122,10 +136,40 @@ private data class BottomTab(
 @Composable
 private fun TiebaApp(app: TiebaApplication) {
     val repository: TiebaRepository = app.repository
+    val accountStore = app.accountStore
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var openedThread by remember { mutableStateOf<OpenedThread?>(null) }
     var selectedTab by rememberSaveable { mutableIntStateOf(TAB_HOME) }
     var keyword by rememberSaveable { mutableStateOf("") }
+    var loginNote by remember { mutableStateOf("") }
+
+    // 登录成功后：写入凭证 → 补取 tbs → 给一句反馈。
+    val loginLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        val data = result.data ?: return@rememberLauncherForActivityResult
+        val bduss = data.getStringExtra(LoginActivity.RESULT_BDUSS).orEmpty()
+        if (bduss.isEmpty()) return@rememberLauncherForActivityResult
+        val stoken = data.getStringExtra(LoginActivity.RESULT_STOKEN).orEmpty()
+        accountStore.save(bduss = bduss, stoken = stoken)
+        loginNote = "登录成功，正在获取发帖令牌…"
+        scope.launch {
+            val tbs = runCatching { repository.fetchTbs() }.getOrDefault("")
+            if (tbs.isNotEmpty()) {
+                accountStore.saveTbs(tbs)
+                loginNote = "登录成功"
+            } else {
+                loginNote = "登录成功，但没取到发帖令牌，可稍后在设置里刷新"
+            }
+        }
+    }
+
+    val requestLogin: () -> Unit = remember(loginLauncher, context) {
+        { loginLauncher.launch(LoginActivity.intent(context)) }
+    }
 
     val tabs = remember {
         listOf(
@@ -137,6 +181,10 @@ private fun TiebaApp(app: TiebaApplication) {
     }
     val bottomPadding = 72.dp
 
+    CompositionLocalProvider(
+        LocalRequestLogin provides requestLogin,
+        LocalLoginNote provides loginNote,
+    ) {
     Box(modifier = Modifier.fillMaxSize()) {
         val opened = openedThread
         if (opened != null) {
@@ -196,6 +244,7 @@ private fun TiebaApp(app: TiebaApplication) {
                 )
             }
         }
+    }
     }
 }
 

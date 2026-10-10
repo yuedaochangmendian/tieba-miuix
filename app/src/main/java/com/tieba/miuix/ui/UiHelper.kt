@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package com.tieba.miuix.ui
 
+import android.content.Intent
 import com.tieba.miuix.data.DarkMode
 import com.tieba.miuix.data.ImageLoadMode
 import com.tieba.miuix.data.Settings
@@ -100,4 +101,28 @@ fun formatRelativeTime(millis: Long): String {
         diffDays < 7 -> diffDays.toString() + " 天前"
         else -> SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(millis))
     }
+}
+
+/** 主题帖的网页地址，用于分享与深链。 */
+fun threadWebUrl(tid: Long): String = "https://tieba.baidu.com/p/" + tid
+
+/**
+ * 调起系统分享面板分享一个主题帖。
+ *
+ * 这里刻意不带 `FLAG_ACTIVITY_NEW_TASK`：调用方是 Activity，
+ * 加了反而会让分享面板跑到独立任务栈里。
+ */
+fun shareThread(context: android.content.Context, tid: Long, title: String): Boolean {
+    if (tid <= 0L) return false
+    return runCatching {
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, title)
+            putExtra(
+                Intent.EXTRA_TEXT,
+                (if (title.isNotBlank()) title + "\n" else "") + threadWebUrl(tid),
+            )
+        }
+        context.startActivity(Intent.createChooser(send, "分享帖子"))
+    }.isSuccess
 }

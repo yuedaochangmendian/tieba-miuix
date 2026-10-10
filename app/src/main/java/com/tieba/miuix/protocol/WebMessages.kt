@@ -166,9 +166,12 @@ data class UserSearchResult(
 
     companion object {
         fun parse(data: JSONObject): UserSearchResult {
-            val exact = data.optJSONObject("exact_match")?.let { UserSearchItem.parse(it, true) }
+            // 实测 `/mo/q/search/user` 返回的是 camelCase 的 exactMatch / fuzzyMatch。
+            val exactJson = data.optJSONObject("exact_match") ?: data.optJSONObject("exactMatch")
+            val fuzzyArray = data.optJSONArray("fuzzy_match") ?: data.optJSONArray("fuzzyMatch")
+            val exact = exactJson?.let { UserSearchItem.parse(it, true) }
             val fuzzy = ArrayList<UserSearchItem>()
-            data.optJSONArray("fuzzy_match")?.let { array ->
+            fuzzyArray?.let { array ->
                 for (i in 0 until array.length()) {
                     array.optJSONObject(i)?.let { fuzzy.add(UserSearchItem.parse(it, false)) }
                 }
@@ -209,13 +212,39 @@ data class ForumSearchPostItem(
 }
 
 /**
+ * 吧内搜索的返回。
+ *
+ * 实测响应结构是「顶层直接放 post_list 与 page」，与 `Page` 模型字段一致，
+ * 因此这里直接复用 [Page]。
+ */
+data class ForumSearchPostResult(
+    val items: List<ForumSearchPostItem> = emptyList(),
+    val page: Page? = null,
+) {
+    companion object {
+        fun parse(json: JSONObject): ForumSearchPostResult {
+            val items = ArrayList<ForumSearchPostItem>()
+            json.optJSONArray("post_list")?.let { array ->
+                for (i in 0 until array.length()) {
+                    array.optJSONObject(i)?.let { items.add(ForumSearchPostItem.parse(it)) }
+                }
+            }
+            return ForumSearchPostResult(
+                items = items,
+                page = json.optJSONObject("page")?.let { Page.parse(it) },
+            )
+        }
+    }
+}
+
+/**
  * JSON 里数字既有可能是 `123` 也可能是 `"123"`，两种都要能读。
  */
 internal fun JSONObject.optLongOrString(key: String): Long {
     val value = opt(key) ?: return 0L
     return when (value) {
         is Number -> value.toLong()
-        is String -> value.toLongOrNull() ?: 0L
+        is String -> parseCount(value).toLong()
         else -> 0L
     }
 }
@@ -225,7 +254,41 @@ internal fun JSONObject.optIntFromString(key: String): Int {
     val value = opt(key) ?: return 0
     return when (value) {
         is Number -> value.toInt()
-        is String -> value.filter { it.isDigit() }.toIntOrNull() ?: 0
+        is String -> parseCount(value)
         else -> 0
     }
+}
+
+/**
+ * 把贴吧的计数文本还原成整数。
+ *
+ * 接口里的 `post_num` / `concern_num` 是缩写过的人类可读文本，实测有
+ * `"1289W"`、`"131W"`（W = 万）、`"1.2万"` 这几种形态，直接 `toIntOrNull`
+ * 会全部变成 0。
+ */
+internal fun parseCount(raw: String): Int {
+    val text = raw.trim()
+    if (text.isEmpty()) return 0
+    var multiplier = 1.0
+    var number = text
+    when {
+        number.endsWith("万") -> {
+            multiplier = 10_000.0
+            number = number.dropLast(1)
+        }
+        number.endsWith("W", ignoreCase = true) -> {
+            multiplier = 10_000.0
+            number = number.dropLast(1)
+        }
+        number.endsWith("亿") -> {
+            multiplier = 100_000_000.0
+            number = number.dropLast(1)
+        }
+    }
+    number = number.trim()
+    if (number.isEmpty()) return 0
+    val digits = number.filter { it.isDigit() || it == '.' }
+    if (digits.isEmpty()) return 0
+    val value = digits.toDoubleOrNull() ?: return 0
+    return (value * multiplier).toInt()
 }

@@ -64,7 +64,30 @@ data class Page(
             }
             return Page(pageSize, currentPage, totalCount, totalPage, hasMore, hasPrev)
         }
+
+        /**
+         * 从 JSON 解析。
+         *
+         * 吧内搜索（`POST /c/s/searchpost`）的分页信息是 JSON，且所有字段都是字符串。
+         */
+        fun parse(json: org.json.JSONObject): Page = Page(
+            pageSize = json.optIntFromString("page_size"),
+            currentPage = json.optIntFromString("current_page"),
+            totalCount = json.optIntFromString("total_count"),
+            totalPage = json.optIntFromString("total_page"),
+            hasMore = json.opt("has_more").toBooleanFlag(),
+            hasPrev = json.opt("has_prev").toBooleanFlag(),
+        )
     }
+}
+
+/** JSON 里的布尔可能是 `true`、`1` 或 `"1"`。 */
+internal fun Any?.toBooleanFlag(): Boolean = when (this) {
+    null -> false
+    is Boolean -> this
+    is Number -> toInt() != 0
+    is String -> this == "1" || equals("true", ignoreCase = true)
+    else -> false
 }
 
 /** `Agree` 顶/踩信息。`agree_num=1`、`disagree_num=4`。 */
