@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.tieba.miuix.data.TiebaRepository
+import com.tieba.miuix.ui.ForumDetailActivity
 import com.tieba.miuix.ui.ForumListPage
 import com.tieba.miuix.ui.HistoryPage
 import com.tieba.miuix.ui.LocalAccountStore
@@ -56,6 +57,7 @@ import com.tieba.miuix.ui.LocalSettingsStore
 import com.tieba.miuix.ui.LoginActivity
 import com.tieba.miuix.ui.SearchPage
 import com.tieba.miuix.ui.SettingsPage
+import com.tieba.miuix.ui.ThreadDetailActivity
 import com.tieba.miuix.ui.ThreadDetailPage
 import com.tieba.miuix.ui.theme.TiebaTheme
 import kotlinx.coroutines.launch
@@ -76,13 +78,13 @@ private const val TAB_HOME = 0
 private const val TAB_SEARCH = 1
 private const val TAB_HISTORY = 2
 private const val TAB_SETTINGS = 3
-
 /**
  * 唯一的 Activity。
  *
  * 页面切换只用状态机，不引入 navigation 依赖：
- * - 底部四个 Tab 常驻；
- * - 帖子详情是盖在 Tab 之上的覆盖层，返回键先关覆盖层。
+ * - 底部四个 Tab 常驻，切 Tab 不重建 App；
+ * - 帖子详情 / 吧详情是独立 Activity，点进去就压入系统任务栈，
+ *   返回手势、返回键都由系统管，回到这里时 Tab 与滚动位置都还在。
  */
 class MainActivity : ComponentActivity() {
 
@@ -120,13 +122,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** 当前打开的主题帖；为空表示停留在 Tab 页。 */
-private data class OpenedThread(
-    val tid: Long,
-    val title: String,
-    val forumName: String,
-)
-
 private data class BottomTab(
     val label: String,
     val icon: ImageVector,
@@ -140,7 +135,6 @@ private fun TiebaApp(app: TiebaApplication) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    var openedThread by remember { mutableStateOf<OpenedThread?>(null) }
     var selectedTab by rememberSaveable { mutableIntStateOf(TAB_HOME) }
     var keyword by rememberSaveable { mutableStateOf("") }
     var loginNote by remember { mutableStateOf("") }
@@ -185,66 +179,61 @@ private fun TiebaApp(app: TiebaApplication) {
         LocalRequestLogin provides requestLogin,
         LocalLoginNote provides loginNote,
     ) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        val opened = openedThread
-        if (opened != null) {
-            // 详情页盖满全屏，含底部导航区域。
-            BackHandler { openedThread = null }
-            ThreadDetailPage(
-                repository = repository,
-                tid = opened.tid,
-                title = opened.title,
-                forumName = opened.forumName,
-                onBack = { openedThread = null },
-            )
-        } else {
-            Column(modifier = Modifier.fillMaxSize()) {
-                Box(modifier = Modifier.weight(1f)) {
-                    when (selectedTab) {
-                        TAB_SEARCH -> SearchPage(
-                            bottomPadding = bottomPadding,
-                            onOpenThread = { tid, forumName ->
-                                openedThread = OpenedThread(tid, "", forumName)
-                            },
-                            onOpenForum = { name ->
-                                keyword = name
-                                selectedTab = TAB_HOME
-                            },
-                        )
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.weight(1f)) {
+                when (selectedTab) {
+                    TAB_SEARCH -> SearchPage(
+                        bottomPadding = bottomPadding,
+                        onOpenThread = { tid, forumName ->
+                            context.startActivity(
+                                ThreadDetailActivity.intent(context, tid, "", forumName),
+                            )
+                        },
+                        onOpenForum = { name ->
+                            keyword = name
+                            selectedTab = TAB_HOME
+                        },
+                    )
 
-                        TAB_HISTORY -> HistoryPage(
-                            bottomPadding = bottomPadding,
-                            onOpenThread = { record ->
-                                openedThread = OpenedThread(record.tid, record.title, record.forumName)
-                            },
-                            onOpenForum = { name ->
-                                keyword = name
-                                selectedTab = TAB_HOME
-                            },
-                        )
+                    TAB_HISTORY -> HistoryPage(
+                        bottomPadding = bottomPadding,
+                        onOpenThread = { record ->
+                            context.startActivity(
+                                ThreadDetailActivity.intent(
+                                    context,
+                                    record.tid,
+                                    record.title,
+                                    record.forumName,
+                                ),
+                            )
+                        },
+                        onOpenForum = { name ->
+                            context.startActivity(ForumDetailActivity.intent(context, name))
+                        },
+                    )
 
-                        TAB_SETTINGS -> SettingsPage(bottomPadding = bottomPadding)
+                    TAB_SETTINGS -> SettingsPage(bottomPadding = bottomPadding)
 
-                        else -> ForumListPage(
-                            repository = repository,
-                            initialKeyword = keyword,
-                            onKeywordChange = { keyword = it },
-                            onOpenThread = { tid, title, forumName ->
-                                openedThread = OpenedThread(tid, title, forumName)
-                            },
-                            bottomPadding = bottomPadding,
-                        )
-                    }
+                    else -> ForumListPage(
+                        repository = repository,
+                        initialKeyword = keyword,
+                        onKeywordChange = { keyword = it },
+                        onOpenThread = { tid, title, forumName ->
+                            context.startActivity(
+                                ThreadDetailActivity.intent(context, tid, title, forumName),
+                            )
+                        },
+                        bottomPadding = bottomPadding,
+                    )
                 }
-
-                BottomBar(
-                    tabs = tabs,
-                    selectedTab = selectedTab,
-                    onSelect = { selectedTab = it },
-                )
             }
+
+            BottomBar(
+                tabs = tabs,
+                selectedTab = selectedTab,
+                onSelect = { selectedTab = it },
+            )
         }
-    }
     }
 }
 

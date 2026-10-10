@@ -53,6 +53,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.rememberPullToRefreshState
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Info
 import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.icon.extended.Share
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -185,6 +186,16 @@ fun ThreadDetailPage(
                     }
                 },
                 actions = {
+                    val detailForumName = forumName.ifBlank { forum?.name.orEmpty() }
+                    if (detailForumName.isNotBlank()) {
+                        IconButton(onClick = {
+                            context.startActivity(
+                                ForumDetailActivity.intent(context, detailForumName),
+                            )
+                        }) {
+                            Icon(imageVector = MiuixIcons.Info, contentDescription = "吧详情")
+                        }
+                    }
                     IconButton(onClick = {
                         shareThread(context, tid, shownTitle)
                     }) {

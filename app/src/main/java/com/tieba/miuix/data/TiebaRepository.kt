@@ -3,6 +3,7 @@
 package com.tieba.miuix.data
 
 import com.tieba.miuix.protocol.CommonReq
+import com.tieba.miuix.protocol.ForumDetailProto
 import com.tieba.miuix.protocol.ForumHome
 import com.tieba.miuix.protocol.ForumSearchResult
 import com.tieba.miuix.protocol.FrsPageProto
@@ -124,6 +125,31 @@ class TiebaRepository(
             referer = "https://" + TiebaConst.WEB_BASE_HOST + "/",
         )
         ForumHome.parse(json)
+    }
+
+    /**
+     * 吧详情（App 协议 `POST /c/f/forum/getforumdetail?cmd=303021`）。
+     *
+     * 实测**匿名可用**：返回吧头像、会员数、帖子数、口号与分类。
+     * 需要数字的吧 id（`forum_id`），调用方一般先用 [searchForum] 拿到 id。
+     */
+    suspend fun getForumDetail(forumId: Long): ForumDetailProto.Response = withContext(Dispatchers.IO) {
+        if (forumId <= 0L) return@withContext ForumDetailProto.Response()
+        val credentials = credentialsProvider()
+        val bytes = ProtoHttp.post(
+            url = "http://" + TiebaConst.APP_BASE_HOST +
+                "/c/f/forum/getforumdetail?cmd=" + TiebaConst.CMD_FORUM_DETAIL + "&format=protobuf",
+            payload = ForumDetailProto.pack(
+                forumId = forumId,
+                common = CommonReq(
+                    clientVersion = TiebaConst.LATEST_VERSION,
+                    bduss = credentials.bduss,
+                    stoken = credentials.stoken,
+                    tbs = credentials.tbs,
+                ),
+            ),
+        )
+        ForumDetailProto.parse(bytes)
     }
 
     /**
