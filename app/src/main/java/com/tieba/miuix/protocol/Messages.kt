@@ -181,7 +181,11 @@ data class User(
 
     /** 头像的远程地址；为空时 UI 会退化为文字头像。 */
     val portraitUrl: String
-        get() = if (portrait.isEmpty()) "" else "https://tb.himg.baidu.com/sys/portrait/item/$portrait"
+        get() = when {
+            portrait.isEmpty() -> ""
+            portrait.startsWith("http", ignoreCase = true) -> portrait
+            else -> "https://tb.himg.baidu.com/sys/portrait/item/$portrait"
+        }
 
     companion object {
         fun parse(r: ProtoReader): User {

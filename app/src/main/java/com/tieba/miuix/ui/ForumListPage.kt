@@ -127,6 +127,15 @@ fun ForumListPage(
         load(targetPage = 1, replace = true)
     }
 
+    // 逛过的吧进浏览历史（设置里可以关掉）。只在真的取到帖子后记一次，
+    // 免得把打错的吧名也写进历史。
+    val historyStore = LocalHistoryStore.current
+    val settings = currentSettings
+    LaunchedEffect(forumName, threads, settings.recordHistory) {
+        if (threads.isEmpty() || forumName.isBlank() || !settings.recordHistory) return@LaunchedEffect
+        historyStore.addForum(forumName)
+    }
+
     // 首页的「关注的吧 / 热门吧」只在真正进入某个吧之后才没必要再加载，
     // 所以这里只在首次进页面时抓一次；失败时静默降级（那一块直接不显示）。
     LaunchedEffect(Unit) {
@@ -195,18 +204,37 @@ fun ForumListPage(
                     }
                 }
 
-                // 还没进入任何吧时，顶部给一条「关注的吧 / 热门吧」快捷入口。
-                val home = forumHome
-                if (forumName.isBlank() && home != null && !home.isEmpty) {
-                    item(key = "forum-home") {
-                        ForumHomeCard(
-                            home = home,
-                            onPick = { picked ->
-                                keyword = picked
-                                onKeywordChange(picked)
-                                forumName = picked
-                            },
-                        )
+                // 还没进入任何吧时，顶部给一条「关注的吧 / 热门吧 / 最近逛过」快捷入口。
+                if (forumName.isBlank()) {
+                    val home = forumHome
+                    if (home != null && !home.isEmpty) {
+                        item(key = "forum-home") {
+                            ForumHomeCard(
+                                home = home,
+                                onPick = { picked ->
+                                    keyword = picked
+                                    onKeywordChange(picked)
+                                    forumName = picked
+                                },
+                            )
+                        }
+                    }
+                    val recent = if (settings.homeShowRecentForum) {
+                        historyStore.forums.take(10)
+                    } else {
+                        emptyList()
+                    }
+                    if (recent.isNotEmpty()) {
+                        item(key = "recent-forum") {
+                            RecentForumCard(
+                                names = recent.map { it.name },
+                                onPick = { picked ->
+                                    keyword = picked
+                                    onKeywordChange(picked)
+                                    forumName = picked
+                                },
+                            )
+                        }
                     }
                 }
 
@@ -446,6 +474,53 @@ private fun ForumHomeCard(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/** 首页的「最近逛过的吧」：纯本地历史，横排文字卡。 */
+@Composable
+private fun RecentForumCard(
+    names: List<String>,
+    onPick: (String) -> Unit,
+) {
+    if (names.isEmpty()) return
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp),
+        cornerRadius = 12.dp,
+        insideMargin = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceContainer),
+    ) {
+        Text(
+            text = "最近逛过",
+            style = MiuixTheme.textStyles.footnote2,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        LazyRow {
+            items(items = names, key = { it }) { name ->
+                Card(
+                    modifier = Modifier.padding(end = 8.dp),
+                    cornerRadius = 10.dp,
+                    insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    colors = CardDefaults.defaultColors(
+                        color = MiuixTheme.colorScheme.surfaceContainerHigh,
+                    ),
+                    pressFeedbackType = PressFeedbackType.Sink,
+                    showIndication = true,
+                    onClick = { onPick(name) },
+                ) {
+                    Text(
+                        text = name,
+                        style = MiuixTheme.textStyles.footnote1,
+                        color = MiuixTheme.colorScheme.onSurfaceContainer,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
         }
