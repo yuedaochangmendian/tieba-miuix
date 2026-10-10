@@ -26,9 +26,12 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,13 +40,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.SubcomposeAsyncImage
+import com.tieba.miuix.data.saveImageToGallery
 import com.tieba.miuix.protocol.PbContent
+import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
@@ -51,7 +57,9 @@ import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Close
+import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import android.widget.Toast
 
 /**
  * 一张待查看的图片。
@@ -152,6 +160,9 @@ fun ImageViewerDialog(
     val start = initialIndex.coerceIn(0, images.lastIndex)
     // 大图查看属于用户主动行为，不套用列表的省流量策略。
     val settings = currentSettings
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var savingUrl by remember { mutableStateOf("") }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -180,6 +191,35 @@ fun ImageViewerDialog(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    val currentUrl = images.getOrNull(pagerState.currentPage)?.url.orEmpty()
+                    IconButton(
+                        onClick = {
+                            if (savingUrl.isNotEmpty() || currentUrl.isEmpty()) return@IconButton
+                            savingUrl = currentUrl
+                            scope.launch {
+                                val fileName = "tieba_" + System.currentTimeMillis() + ".jpg"
+                                val result = runCatching {
+                                    saveImageToGallery(context, currentUrl, fileName)
+                                }
+                                savingUrl = ""
+                                Toast.makeText(
+                                    context,
+                                    result.fold(
+                                        onSuccess = { "已保存到相册：" + it },
+                                        onFailure = { it.message ?: "保存失败" },
+                                    ),
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        },
+                        enabled = savingUrl.isEmpty(),
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Download,
+                            contentDescription = "保存到相册",
+                            tint = if (savingUrl.isEmpty()) Color.White else Color.White.copy(alpha = 0.4f),
+                        )
+                    }
                     IconButton(onClick = onDismiss) {
                         Icon(
                             imageVector = MiuixIcons.Close,
