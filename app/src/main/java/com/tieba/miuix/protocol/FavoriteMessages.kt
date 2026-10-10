@@ -114,7 +114,76 @@ data class ConcernedForums(
     }
 }
 
-/** 关注/取关、收藏/取消收藏这类写操作的结果。 */
+/** 签到结果：单个吧签到的详情，或批量签到的汇总。 */
+data class SignResult(
+    val success: Boolean,
+    val errorCode: Int,
+    val errorMessage: String,
+    val signedCount: Int = 0,
+    val continuousDays: Int = 0,
+    val rank: Int = 0,
+    val bonusPoint: Int = 0,
+    val levelName: String = "",
+) {
+    /** 面向用户的一句话说明。 */
+    val displayMessage: String
+        get() = when {
+            success && continuousDays > 0 ->
+                "签到成功：连续 " + continuousDays + " 天" +
+                    (if (rank > 0) "，本吧第 " + rank + " 个签到" else "") +
+                    (if (bonusPoint > 0) "，+" + bonusPoint + " 经验" else "")
+            success -> "签到成功"
+            errorCode == 340006 || errorCode == 4 -> "登录状态已失效，请到「设置 → 账号」重新登录"
+            errorMessage.isNotBlank() -> errorMessage
+            errorCode != 0 -> "签到失败（错误码 " + errorCode + "）"
+            else -> "签到失败"
+        }
+
+    companion object {
+        /** 单个吧签到（`/c/c/forum/sign`）。 */
+        fun parseSingle(json: JSONObject): SignResult {
+            val code = json.optInt("error_code")
+            val message = json.optString("error_msg")
+            val userInfo = json.optJSONObject("user_info")
+            val signIn = userInfo?.optIntFromString("is_sign_in") ?: 0
+            val levelName = userInfo?.optString("level_name").orEmpty()
+            // is_sign_in=0 表示今天已经签过了，服务端仍算成功。
+            val success = code == 0
+            return SignResult(
+                success = success,
+                errorCode = code,
+                errorMessage = if (success) "" else message.ifBlank { "签到失败" },
+                signedCount = if (signIn >= 1 || success) 1 else 0,
+                continuousDays = userInfo?.optIntFromString("cont_sign_num") ?: 0,
+                rank = userInfo?.optIntFromString("user_sign_rank") ?: 0,
+                bonusPoint = userInfo?.optIntFromString("sign_bonus_point") ?: 0,
+                levelName = levelName,
+            )
+        }
+
+        /** 批量签到（`/c/c/forum/msign`），`info` 里每个吧一条。 */
+        fun parseBatch(json: JSONObject): SignResult {
+            val code = json.optInt("error_code")
+            val info = json.optJSONArray("info") ?: JSONArray()
+            var signed = 0
+            for (i in 0 until info.length()) {
+                val item = info.optJSONObject(i) ?: continue
+                if (item.optIntFromString("signed") != 0) signed++
+            }
+            val codes = json.optJSONObject("error")?.optIntFromString("errno") ?: code
+            val message = json.optJSONObject("error")?.optString("errmsg").orEmpty()
+                .ifBlank { json.optString("error_msg") }
+            return SignResult(
+                success = codes == 0,
+                errorCode = codes,
+                errorMessage = if (codes == 0) "" else message.ifBlank { "批量签到失败" },
+                signedCount = signed,
+            )
+        }
+    }
+}
+
+/** 关注 / 取关、收藏 / 取消收藏这类写操作的通用结果。 */
 data class CommonResult(
     val success: Boolean,
     val errorCode: Int,

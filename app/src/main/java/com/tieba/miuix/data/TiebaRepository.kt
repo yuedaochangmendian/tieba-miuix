@@ -12,6 +12,7 @@ import com.tieba.miuix.protocol.FrsPageProto
 import com.tieba.miuix.protocol.ForumSearchPostResult
 import com.tieba.miuix.protocol.PbPageProto
 import com.tieba.miuix.protocol.ReplyResult
+import com.tieba.miuix.protocol.SignResult
 import com.tieba.miuix.protocol.StoredThreads
 import com.tieba.miuix.protocol.TiebaConst.PostSortType
 import com.tieba.miuix.protocol.ProtoHttp
@@ -531,6 +532,86 @@ class TiebaRepository(
             ),
         )
         CommonResult.of(json)
+    }
+
+    /**
+     * 单个吧签到（`POST /c/c/forum/sign`）。
+     *
+     * 表单只要 `kw` + `tbs`，其余（`stoken`/`_client_version`/`user_id`）在
+     * TiebaLite 里是公共参数，这里显式带上更稳。
+     */
+    suspend fun signForum(forumName: String): SignResult = withContext(Dispatchers.IO) {
+        val credentials = credentialsProvider()
+        if (!credentials.isLoggedIn) {
+            return@withContext SignResult(
+                success = false,
+                errorCode = 340006,
+                errorMessage = "签到需要先登录：到「我的 → 账号」里登录贴吧",
+            )
+        }
+        if (credentials.tbs.isEmpty()) {
+            return@withContext SignResult(
+                success = false,
+                errorCode = 4,
+                errorMessage = "缺少发帖令牌（tbs），到「我的 → 账号」里刷新一下",
+            )
+        }
+        if (forumName.isBlank()) {
+            return@withContext SignResult(false, 0, "吧名无效")
+        }
+        val json = WebHttp.postFormJson(
+            host = TiebaConst.APP_BASE_HOST,
+            path = "/c/c/forum/sign",
+            params = listOf(
+                "kw" to forumName,
+                "tbs" to credentials.tbs,
+                "stoken" to credentials.stoken,
+                "user_id" to credentials.uid,
+                "_client_version" to TiebaConst.LATEST_VERSION,
+            ),
+        )
+        SignResult.parseSingle(json)
+    }
+
+    /**
+     * 一键签到（`POST /c/c/forum/msign`）。
+     *
+     * `forum_ids` 是逗号分隔的数字 id 串，一次最多几十个吧；返回 `info` 数组里
+     * 每个吧一条记录，`signed=1` 表示这个吧今天已经签过了。
+     */
+    suspend fun signForums(forumIds: List<Long>): SignResult = withContext(Dispatchers.IO) {
+        val credentials = credentialsProvider()
+        if (!credentials.isLoggedIn) {
+            return@withContext SignResult(
+                success = false,
+                errorCode = 340006,
+                errorMessage = "签到需要先登录：到「我的 → 账号」里登录贴吧",
+            )
+        }
+        if (credentials.tbs.isEmpty()) {
+            return@withContext SignResult(
+                success = false,
+                errorCode = 4,
+                errorMessage = "缺少发帖令牌（tbs），到「我的 → 账号」里刷新一下",
+            )
+        }
+        val ids = forumIds.filter { it > 0L }.distinct()
+        if (ids.isEmpty()) {
+            return@withContext SignResult(false, 0, "没有可签到的吧")
+        }
+        val json = WebHttp.postFormJson(
+            host = TiebaConst.APP_BASE_HOST,
+            path = "/c/c/forum/msign",
+            params = listOf(
+                "forum_ids" to ids.joinToString(","),
+                "tbs" to credentials.tbs,
+                "stoken" to credentials.stoken,
+                "user_id" to credentials.uid,
+                "authsid" to "null",
+                "_client_version" to TiebaConst.LATEST_VERSION,
+            ),
+        )
+        SignResult.parseBatch(json)
     }
 
     // ---------------------------------------------------------------- 登录

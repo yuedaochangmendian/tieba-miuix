@@ -55,6 +55,7 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Favorites
+import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -126,6 +127,7 @@ private fun ForumDetailScreen(
     var sheetThread by remember { mutableStateOf<ForumDetailProto.SimpleThread?>(null) }
     var note by remember { mutableStateOf("") }
     var showConcernDialog by remember { mutableStateOf(false) }
+    var isSigning by remember { mutableStateOf(false) }
     val accountStore = LocalAccountStore.current
     val scope = rememberCoroutineScope()
     val scrollBehavior = MiuixScrollBehavior()
@@ -184,6 +186,33 @@ private fun ForumDetailScreen(
                 actions = {
                     val info = detail
                     if (info != null) {
+                        IconButton(onClick = {
+                            when {
+                                !accountStore.isLoggedIn ->
+                                    note = "签到需要先登录：到「设置 → 账号」里登录贴吧"
+                                !accountStore.hasTbs ->
+                                    note = "还没取到发帖令牌（tbs），到「设置 → 账号」里刷新一下"
+                                isSigning -> Unit
+                                else -> {
+                                    isSigning = true
+                                    scope.launch {
+                                        val result = runCatching {
+                                            repository.signForum(
+                                                info.forumName.ifBlank { forumName },
+                                            )
+                                        }.getOrNull()
+                                        isSigning = false
+                                        note = result?.displayMessage ?: "签到失败"
+                                        if (result?.success == true) reloadKey += 1
+                                    }
+                                }
+                            }
+                        }) {
+                            Icon(
+                                imageVector = MiuixIcons.Ok,
+                                contentDescription = if (isSigning) "签到中" else "签到",
+                            )
+                        }
                         IconButton(onClick = {
                             when {
                                 !accountStore.isLoggedIn ->

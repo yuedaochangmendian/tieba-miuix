@@ -31,6 +31,8 @@ import androidx.compose.foundation.shape.CircleShape
 import com.tieba.miuix.protocol.ConcernedForum
 import com.tieba.miuix.protocol.StoredThread
 import kotlinx.coroutines.launch
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
@@ -42,7 +44,6 @@ import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.TabRow
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.rememberPullToRefreshState
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Refresh
@@ -81,6 +82,7 @@ fun FavoritesPage(
     var isLoading by remember { mutableStateOf(false) }
     var isLoadingMore by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var isSigning by remember { mutableStateOf(false) }
     var loadedOnce by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var note by remember { mutableStateOf("") }
@@ -210,6 +212,36 @@ fun FavoritesPage(
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 4.dp),
             )
+
+            if (selectedTab == FAV_TAB_FORUMS && forums.isNotEmpty()) {
+                Button(
+                    onClick = {
+                        if (isSigning) return@Button
+                        isSigning = true
+                        scope.launch {
+                            val result = runCatching {
+                                repository.signForums(forums.map { it.id })
+                            }.getOrNull()
+                            isSigning = false
+                            note = result?.displayMessage ?: "一键签到失败"
+                            if (result?.success == true) loadForums()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    enabled = !isSigning && accountStore.hasTbs,
+                ) {
+                    Text(
+                        text = when {
+                            isSigning -> "签到中…"
+                            !accountStore.hasTbs -> "缺少发帖令牌，无法签到"
+                            else -> "一键签到（" + forums.size + " 个吧）"
+                        },
+                        style = MiuixTheme.textStyles.button,
+                    )
+                }
+            }
 
             PullToRefresh(
                 isRefreshing = isRefreshing,
