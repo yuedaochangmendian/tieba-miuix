@@ -26,6 +26,10 @@ data class UserPostItem(
     val agreeNum: Int = 0,
     val isThread: Boolean = false,
     val isDeleted: Boolean = false,
+    /** 发言者 uid；服务端每条都带，用来识别「我自己」。 */
+    val authorUid: Long = 0,
+    /** 发言者头像标识（裸串，如 `tb.1.xxxx`）。 */
+    val authorPortrait: String = "",
 ) {
     /** 列表里显示的主文案。 */
     val displayTitle: String
@@ -113,6 +117,8 @@ data class UserPostItem(
             agreeNum = json.optJSONObject("agree")?.intOf("agree_num") ?: 0,
             isThread = json.flagOf("is_thread"),
             isDeleted = json.flagOf("is_post_deleted"),
+            authorUid = json.longOf("user_id"),
+            authorPortrait = json.optString("user_portrait", ""),
         )
     }
 }
@@ -131,6 +137,17 @@ data class UserPostResult(
     val hidePost: Boolean = false,
 ) {
     val isEmpty: Boolean get() = items.isEmpty()
+
+    /**
+     * 这一页发言者的 uid / 头像。
+     *
+     * 用途：`/c/f/forum/getforumlist` 不返回自己的 uid，而「我的帖子」需要拿它去查
+     * `/c/u/feed/userpost`。先空 uid 拉一页自己的发言，从第一条里把身份读出来，
+     * 就不必为登录流程再加一个接口。
+     */
+    val firstUid: Long get() = items.firstOrNull { it.authorUid > 0L }?.authorUid ?: 0L
+    val firstPortrait: String
+        get() = items.firstOrNull { it.authorPortrait.isNotEmpty() }?.authorPortrait.orEmpty()
 
     companion object {
         fun parse(json: JSONObject): UserPostResult {

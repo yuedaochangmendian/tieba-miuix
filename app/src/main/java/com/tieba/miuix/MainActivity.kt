@@ -302,6 +302,11 @@ private fun TiebaApp(app: TiebaApplication) {
                         onOpenHistory = { profilePage = PROFILE_PAGE_HISTORY },
                         onOpenSearchHistory = { selectedTab = TAB_SEARCH },
                         onOpenFavorites = { profilePage = PROFILE_PAGE_FAVORITES },
+                        onOpenSelf = { uid, portrait ->
+                            context.startActivity(
+                                UserPageActivity.intent(context, portrait, uid),
+                            )
+                        },
                     )
 
                     else -> HomeFeedPage(

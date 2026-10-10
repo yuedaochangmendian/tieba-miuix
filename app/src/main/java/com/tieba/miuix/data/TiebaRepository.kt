@@ -274,6 +274,45 @@ class TiebaRepository(
      * 主题与回复走同一个接口，靠 [isThread] 区分；`uid` 用名片里的 `tieba_uid`。
      * 走 `APP_BASE_HOST` 时 [WebHttp.postFormJson] 会自动用 APP_SALT 签名。
      */
+    /**
+     * 拉一页「我自己的发言」，用来确认登录账号的 uid 与头像。
+     *
+     * `/c/f/forum/getforumlist` 只回吧列表，不带用户身份；而「我的帖子」需要 uid。
+     * 登录后先这样查一次，把 uid / portrait 存进 [AccountStore]，
+     * 之后所有需要 uid 的地方（发帖、消息中心跳转、用户页）就都有着落了。
+     */
+    suspend fun getSelfPosts(isThread: Boolean = true): UserPostResult =
+        getUserPosts(uid = selfUid(), pn = 1, rn = 20, isThread = isThread)
+
+    /**
+     * 当前登录账号的 uid。
+     *
+     * 优先取凭证里存的；没有时用「`/c/u/feed/userpost` 空 uid」探测——
+     * 该接口在带 Cookie 时会默认返回**自己**的发言，第一条的 `user_id` 就是本人。
+     */
+    suspend fun selfUid(): Long {
+        val stored = credentialsProvider().uid.filter { it.isDigit() }.toLongOrNull() ?: 0L
+        if (stored > 0L) return stored
+        val credentials = credentialsProvider()
+        if (!credentials.isLoggedIn) return 0L
+        val json = runCatching {
+            WebHttp.postFormJson(
+                host = TiebaConst.APP_BASE_HOST,
+                path = "/c/u/feed/userpost",
+                params = listOf(
+                    "_client_version" to TiebaConst.LATEST_VERSION,
+                    "uid" to "0",
+                    "pn" to "1",
+                    "rn" to "1",
+                    "is_thread" to "1",
+                    "need_content" to "0",
+                ),
+                cookie = cookieHeader(),
+            )
+        }.getOrNull() ?: return 0L
+        return UserPostResult.parse(json).firstUid
+    }
+
     suspend fun getUserPosts(
         uid: Long,
         pn: Int = 1,

@@ -67,6 +67,8 @@ fun ProfilePage(
     onOpenHistory: () -> Unit,
     onOpenSearchHistory: () -> Unit,
     onOpenFavorites: () -> Unit,
+    /** 打开当前账号的用户页（「我的帖子与回复」）。 */
+    onOpenSelf: (uid: Long, portrait: String) -> Unit = { _, _ -> },
 ) {
     val repository = LocalRepository.current
     val accountStore = LocalAccountStore.current
@@ -81,6 +83,7 @@ fun ProfilePage(
     var forumsError by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var isSigning by remember { mutableStateOf(false) }
+    var isResolvingSelf by remember { mutableStateOf(false) }
     var reloadKey by remember { mutableStateOf(0) }
 
     suspend fun loadForums() {
@@ -253,6 +256,38 @@ fun ProfilePage(
                     title = "收藏的帖子",
                     summary = "登录后可见",
                     onClick = { onOpenFavorites() },
+                )
+            }
+
+            item(key = "entry-my-posts") {
+                ActionRow(
+                    title = "我的帖子与回复",
+                    summary = when {
+                        !accountStore.isLoggedIn -> "登录后可见"
+                        isResolvingSelf -> "正在确认账号身份…"
+                        else -> "查看自己的主题与回复"
+                    },
+                    onClick = {
+                        if (!accountStore.isLoggedIn) {
+                            requestLogin()
+                        } else if (!isResolvingSelf) {
+                            scope.launch {
+                                isResolvingSelf = true
+                                // 「我的帖子」需要 uid，而登录流程只拿到 BDUSS/STOKEN；
+                                // 用 userpost 的空 uid 查询把身份读出来（见 TiebaRepository.selfUid）。
+                                val resolved = runCatching { repository.selfUid() }.getOrNull() ?: 0L
+                                val portrait = runCatching {
+                                    repository.getSelfPosts()
+                                }.getOrNull()?.firstPortrait.orEmpty()
+                                isResolvingSelf = false
+                                if (resolved > 0L) {
+                                    onOpenSelf(resolved, portrait)
+                                } else {
+                                    note = "没能确认账号 ID，可能是登录已过期，试试重新登录"
+                                }
+                            }
+                        }
+                    },
                 )
             }
 
