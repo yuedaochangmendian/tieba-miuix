@@ -9,6 +9,7 @@ import com.tieba.miuix.protocol.ForumSearchResult
 import com.tieba.miuix.protocol.FrsPageProto
 import com.tieba.miuix.protocol.ForumSearchPostResult
 import com.tieba.miuix.protocol.PbPageProto
+import com.tieba.miuix.protocol.ReplyResult
 import com.tieba.miuix.protocol.TiebaConst.PostSortType
 import com.tieba.miuix.protocol.ProtoHttp
 import com.tieba.miuix.protocol.ThreadSearchItem
@@ -310,6 +311,73 @@ class TiebaRepository(
             ),
         )
         ForumSearchPostResult.parse(json)
+    }
+
+    // ---------------------------------------------------------------- 写操作
+
+    /**
+     * 回复主题帖（`POST /c/c/post/add`，表单 + APP 盐签名）。
+     *
+     * 必须已登录且拿到 `tbs`，否则服务端直接回「用户未登录」或「验证码」。
+     * 参数按 TiebaLite 的 `addPostFlow` 抄：`_client_version` 用 `LATEST_VERSION`，
+     * `anonymous=1` 表示的是「用户名显示策略」而不是匿名发帖，别改。
+     *
+     * @param tid 主题帖 id
+     * @param fid 吧 id，拿不到时传 0（服务端会用 kw 兜）
+     * @param kw 吧名
+     * @param content 正文
+     * @return [ReplyResult]，`isSuccess` 为 false 时看 `displayMessage`
+     */
+    suspend fun replyPost(
+        tid: Long,
+        fid: Long,
+        kw: String,
+        content: String,
+    ): ReplyResult = withContext(Dispatchers.IO) {
+        val credentials = credentialsProvider()
+        if (!credentials.isLoggedIn) {
+            return@withContext ReplyResult(errorMessage = "还没有登录，先登录再回复")
+        }
+        if (tid <= 0L) return@withContext ReplyResult(errorMessage = "帖子 id 无效")
+        if (content.isBlank()) return@withContext ReplyResult(errorMessage = "回复内容不能为空")
+        if (credentials.tbs.isEmpty()) {
+            return@withContext ReplyResult(
+                errorMessage = "缺少发帖令牌（tbs），到设置里刷新后再试",
+            )
+        }
+        val params = listOf(
+            "anonymous" to "1",
+            "authsid" to "null",
+            "barrage_time" to "0",
+            "can_no_forum" to "0",
+            "content" to content,
+            "entrance_type" to "0",
+            "fid" to fid.toString(),
+            "from_fourm_id" to "null",
+            "is_ad" to "0",
+            "is_barrage" to "0",
+            "is_feedback" to "0",
+            "kw" to kw,
+            "new_vcode" to "1",
+            "post_from" to "3",
+            "quote_id" to "null",
+            "reply_uid" to "null",
+            "repostid" to "null",
+            "stoken" to credentials.stoken,
+            "takephoto_num" to "0",
+            "tbs" to credentials.tbs,
+            "tid" to tid.toString(),
+            "v_fid" to "",
+            "v_fname" to "",
+            "vcode_tag" to "12",
+            "_client_version" to TiebaConst.LATEST_VERSION,
+        )
+        val json = WebHttp.postFormJson(
+            host = TiebaConst.APP_BASE_HOST,
+            path = "/c/c/post/add",
+            params = params,
+        )
+        ReplyResult.parse(json)
     }
 
     // ---------------------------------------------------------------- 登录

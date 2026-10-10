@@ -44,6 +44,7 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -56,6 +57,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Info
 import top.yukonga.miuix.kmp.icon.extended.Refresh
+import top.yukonga.miuix.kmp.icon.extended.Reply
 import top.yukonga.miuix.kmp.icon.extended.Share
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -97,6 +99,19 @@ fun ThreadDetailPage(
     var showPageJump by remember { mutableStateOf(false) }
     var viewerIndex by remember { mutableStateOf<Int?>(null) }
     var viewerImages by remember { mutableStateOf<List<ImageItem>>(emptyList()) }
+
+    // 回帖：只有登录 + 有 tbs 才允许，否则给出明确提示而不是让服务端拒绝。
+    val accountStore = LocalAccountStore.current
+    var showReply by remember { mutableStateOf(false) }
+    var replySending by remember { mutableStateOf(false) }
+    var replyError by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+
+    LaunchedEffect(note) {
+        if (note.isBlank()) return@LaunchedEffect
+        kotlinx.coroutines.delay(2600)
+        note = ""
+    }
 
     suspend fun load(targetPage: Int, replace: Boolean) {
         if (tid <= 0L) return
@@ -154,6 +169,22 @@ fun ThreadDetailPage(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = {
+                    when {
+                        !accountStore.isLoggedIn -> note = "回复需要先登录：到「设置 → 账号」里登录贴吧"
+                        !accountStore.hasTbs -> note = "还没取到发帖令牌（tbs），到「设置 → 账号」里刷新一下"
+                        else -> {
+                            replyError = ""
+                            showReply = true
+                        }
+                    }
+                },
+            ) {
+                Icon(imageVector = MiuixIcons.Reply, contentDescription = "回复")
+            }
+        },
         topBar = {
             SmallTopAppBar(
                 title = shownTitle,
@@ -244,6 +275,12 @@ fun ThreadDetailPage(
                     }
                 }
 
+                if (note.isNotBlank()) {
+                    item(key = "note") {
+                        MessageCard(text = note, isError = false)
+                    }
+                }
+
                 items(
                     items = posts,
                     key = { post -> if (post.id != 0L) post.id else post.hashCode().toLong() },
@@ -307,6 +344,43 @@ fun ThreadDetailPage(
             images = viewerImages,
             initialIndex = index,
             onDismiss = { viewerIndex = null },
+        )
+    }
+
+    if (showReply) {
+        ReplyDialog(
+            title = shownTitle,
+            forumName = forumName.ifBlank { forum?.name.orEmpty() },
+            sending = replySending,
+            errorMessage = replyError,
+            onSend = { content ->
+                replySending = true
+                replyError = ""
+                scope.launch {
+                    val result = runCatching {
+                        repository.replyPost(
+                            tid = tid,
+                            fid = thread?.fid ?: forum?.id ?: 0L,
+                            kw = forumName.ifBlank { forum?.name.orEmpty() },
+                            content = content,
+                        )
+                    }.getOrElse { e ->
+                        com.tieba.miuix.protocol.ReplyResult(
+                            errorMessage = e.message ?: "网络请求失败",
+                        )
+                    }
+                    replySending = false
+                    if (result.isSuccess) {
+                        showReply = false
+                        note = "回复成功"
+                        // 回到第一页重新拉，顺带把页码、总楼层数刷新掉。
+                        runCatching { reload() }
+                    } else {
+                        replyError = result.displayMessage
+                    }
+                }
+            },
+            onDismiss = { if (!replySending) showReply = false },
         )
     }
 }
