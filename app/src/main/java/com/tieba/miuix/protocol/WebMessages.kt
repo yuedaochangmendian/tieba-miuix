@@ -90,7 +90,9 @@ data class ThreadSearchItem(
 ) {
     companion object {
         fun parse(json: JSONObject): ThreadSearchItem {
-            val user = json.optJSONObject("user")
+            // 不同入口下发作者用的键不一样：搜索接口用 user{user_name,show_nickname}，
+            // 话题详情用 author{name,name_show}，这里一并兼容。
+            val user = json.optJSONObject("user") ?: json.optJSONObject("author")
             val media = ArrayList<String>()
             json.optJSONArray("media")?.let { array ->
                 for (i in 0 until array.length()) {
@@ -106,15 +108,24 @@ data class ThreadSearchItem(
                 tid = json.optLongOrString("tid"),
                 pid = json.optLongOrString("pid"),
                 title = json.optString("title"),
-                content = json.optString("content"),
+                // 话题详情的正文叫 abstract，搜索接口叫 content。
+                content = json.optString("content").ifEmpty { json.optString("abstract") },
                 forumName = json.optString("forum_name"),
-                authorName = user?.optString("show_nickname")?.ifEmpty { user.optString("user_name") }
-                    ?: "",
+                authorName = user?.let { author ->
+                    author.optString("show_nickname")
+                        .ifEmpty { author.optString("name_show") }
+                        .ifEmpty { author.optString("user_name") }
+                        .ifEmpty { author.optString("name") }
+                }.orEmpty(),
                 authorPortrait = user?.optString("portrait").orEmpty(),
-                authorUid = user?.optLongOrString("user_id") ?: 0L,
-                replyNum = json.optIntFromString("post_num"),
-                agreeNum = json.optIntFromString("like_num"),
-                time = json.optLongOrString("time"),
+                authorUid = user?.optLongOrString("user_id")?.takeIf { it > 0L }
+                    ?: user?.optLongOrString("id") ?: 0L,
+                replyNum = json.optIntFromString("post_num").takeIf { it > 0 }
+                    ?: json.optIntFromString("reply_num"),
+                agreeNum = json.optIntFromString("like_num").takeIf { it > 0 }
+                    ?: json.optIntFromString("agree_num"),
+                time = json.optLongOrString("time").takeIf { it > 0L }
+                    ?: json.optLongOrString("create_time"),
                 images = media,
             )
         }

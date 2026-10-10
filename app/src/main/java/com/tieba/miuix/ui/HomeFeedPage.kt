@@ -51,13 +51,15 @@ import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
 private const val HOME_MODE_RECOMMEND = 0
 private const val HOME_MODE_FORUM = 1
+private const val HOME_MODE_TOPIC = 2
 
 /**
  * 首页。
  *
- * 两个模式：
+ * 三个模式：
  * - 「推荐」是默认页，走 `/c/f/forum/hotThreadList` 的热门推荐流，**匿名可用**，
  *   所以不登录也能直接看到内容；
+ * - 「热聊」走 `/c/f/recommend/topicList` 的热话题榜，同样匿名可用；
  * - 「逛吧」是原来那个「输入吧名 + 帖子列表」的页面，复用 [ForumListPage]。
  *
  * 搜索不在这里 —— 底部导航有独立的「搜索」入口，避免首页既当信息流又当搜索框。
@@ -69,6 +71,7 @@ fun HomeFeedPage(
     onKeywordChange: (String) -> Unit,
     onOpenThread: (tid: Long, title: String, forumName: String) -> Unit,
     onOpenUser: (portrait: String) -> Unit = {},
+    onOpenTopic: (id: Long, name: String) -> Unit = { _, _ -> },
     bottomPadding: Dp = 16.dp,
 ) {
     val scope = rememberCoroutineScope()
@@ -105,6 +108,7 @@ fun HomeFeedPage(
     }
 
     // 只在「推荐」模式下真正进入页面时抓一次；切回来不重复请求。
+    // 「热聊」由 HotTopicPage 自己在首次进入时加载。
     LaunchedEffect(mode) {
         if (mode == HOME_MODE_RECOMMEND && !hasLoaded) loadFeed()
     }
@@ -114,7 +118,11 @@ fun HomeFeedPage(
         topBar = {
             SmallTopAppBar(
                 title = "贴吧 Miuix",
-                subtitle = if (mode == HOME_MODE_RECOMMEND) "为你推荐" else "",
+                subtitle = when (mode) {
+                    HOME_MODE_RECOMMEND -> "为你推荐"
+                    HOME_MODE_TOPIC -> "热门话题"
+                    else -> ""
+                },
                 scrollBehavior = scrollBehavior,
                 actions = {
                     if (mode == HOME_MODE_RECOMMEND) {
@@ -125,7 +133,7 @@ fun HomeFeedPage(
                 },
                 bottomContent = {
                     TabRow(
-                        tabs = listOf("推荐", "逛吧"),
+                        tabs = listOf("推荐", "热聊", "逛吧"),
                         selectedTabIndex = mode,
                         onTabSelected = { mode = it },
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -142,6 +150,16 @@ fun HomeFeedPage(
                 onOpenThread = onOpenThread,
                 onOpenUser = onOpenUser,
                 bottomPadding = bottomPadding,
+                embedded = true,
+            )
+            return@Scaffold
+        }
+
+        if (mode == HOME_MODE_TOPIC) {
+            HotTopicPage(
+                repository = repository,
+                onOpenTopic = onOpenTopic,
+                bottomPadding = innerPadding.calculateBottomPadding() + bottomPadding,
                 embedded = true,
             )
             return@Scaffold

@@ -45,6 +45,9 @@ object TiebaConst {
 
     /** 首页热门推荐流（`/c/f/forum/hotThreadList`）。 */
     const val CMD_HOT_THREAD_LIST = 309661
+
+    /** 热话题列表（`/c/f/recommend/topicList`）。 */
+    const val CMD_TOPIC_LIST = 309289
     /** 楼中楼（protobuf）。 */
     const val CMD_PB_FLOOR = 302002
 

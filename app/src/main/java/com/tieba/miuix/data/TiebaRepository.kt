@@ -10,6 +10,8 @@ import com.tieba.miuix.protocol.ForumHome
 import com.tieba.miuix.protocol.ForumSearchResult
 import com.tieba.miuix.protocol.FrsPageProto
 import com.tieba.miuix.protocol.HotThreadListProto
+import com.tieba.miuix.protocol.TopicDetail
+import com.tieba.miuix.protocol.TopicListProto
 import com.tieba.miuix.protocol.ForumSearchPostResult
 import com.tieba.miuix.protocol.MessageCounts
 import com.tieba.miuix.protocol.MessageList
@@ -188,6 +190,56 @@ class TiebaRepository(
                 "?cmd=${TiebaConst.CMD_HOT_THREAD_LIST}"
             HotThreadListProto.parse(
                 ProtoHttp.post(url, HotThreadListProto.pack(common, tabCode)),
+            )
+        }
+
+    /**
+     * 加载热话题详情（`/mo/q/newtopic/topicDetail`，JSON 通道）。
+     *
+     * 匿名可读；`topicName` 只影响服务端返回的分享文案，传空也能拿到数据。
+     */
+    suspend fun getTopicDetail(topicId: Long, topicName: String = ""): TopicDetail =
+        withContext(Dispatchers.IO) {
+            if (topicId <= 0L) return@withContext TopicDetail(
+                id = 0L,
+                name = "",
+                desc = "",
+                discussNum = 0,
+                interactionNum = 0,
+                image = "",
+                bigImage = "",
+                isVideo = false,
+                threads = emptyList(),
+                hasMore = false,
+            )
+            val json = WebHttp.getJson(
+                path = "/mo/q/newtopic/topicDetail",
+                params = listOf(
+                    "topic_id" to topicId.toString(),
+                    "topic_name" to topicName,
+                    "is_new" to "1",
+                ),
+            )
+            TopicDetail.parse(json)
+        }
+
+    /**
+     * 加载热话题列表（`/c/f/recommend/topicList`，`CMD=309289`）。
+     *
+     * 匿名可用，不需要 BDUSS。
+     */
+    suspend fun getHotTopics(): TopicListProto.Response =
+        withContext(Dispatchers.IO) {
+            val credentials = credentialsProvider()
+            val common = CommonReq(
+                clientVersion = TiebaConst.LATEST_VERSION,
+                bduss = credentials.bduss,
+                stoken = credentials.stoken,
+            )
+            val url = "http://${TiebaConst.APP_BASE_HOST}/c/f/recommend/topicList" +
+                "?cmd=${TiebaConst.CMD_TOPIC_LIST}"
+            TopicListProto.parse(
+                ProtoHttp.post(url, TopicListProto.pack(common)),
             )
         }
 

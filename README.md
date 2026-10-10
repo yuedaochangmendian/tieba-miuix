@@ -11,7 +11,10 @@
 **浏览（不需要登录）**
 
 - **首页推荐流**：默认展示全站推荐帖（`/c/f/forum/hotThreadList`，cmd=309661，匿名可读），
-  卡片含作者、回复数、赞数、首楼正文预览与配图；首页顶部可在「推荐 / 逛吧」之间切换。
+  卡片含作者、回复数、赞数、首楼正文预览与配图；首页顶部可在「推荐 / 热聊 / 逛吧」之间切换。
+- **热聊（热话题榜）**：`/c/f/recommend/topicList`（cmd=309289，匿名可读），
+  双列卡片展示话题配图、话题名、简介与讨论数，点进去是话题详情页
+  （`/mo/q/newtopic/topicDetail`），列出该话题下最热的帖子，可直接点进帖子。
 - **吧列表页**：输入吧名进入（输入时会实时给出候选吧，避免拼错）；三种排序（回复时间 / 最新发布 / 热门）；
   帖子卡片展示标题、正文预览、精品标记、作者、回复数、赞数；下拉刷新 + 上拉加载更多；
   悬浮按钮可切换为回顶 / 刷新 / 隐藏。
@@ -92,6 +95,8 @@ app/src/main/java/com/tieba/miuix/
 │   ├── FrsPageProto.kt              # 吧列表（cmd=301001）
 │   ├── PbPageProto.kt               # 帖子列表（cmd=302001）
 │   ├── HotThreadListProto.kt        # 首页推荐流（cmd=309661）
+│   ├── TopicListProto.kt            # 热话题榜（cmd=309289）
+│   ├── TopicDetail.kt               # 话题详情（/mo/q/newtopic/topicDetail）
 │   ├── Messages2.kt                 # 消息中心模型（回复我的 / @我的 / 未读数）
 │   ├── ForumDetailProto.kt          # 吧详情（cmd=303021，含吧内主题帖）
 │   ├── ForumHome.kt                 # 首页热门吧 / 关注的吧
@@ -106,7 +111,10 @@ app/src/main/java/com/tieba/miuix/
 └── ui/
     ├── AppLocals.kt                 # CompositionLocal（仓库与各 Store）
     ├── ForumListPage.kt             # 吧列表页（也可嵌入首页的「逛吧」模式）
-    ├── HomeFeedPage.kt              # 首页（推荐流 / 逛吧 双模式）
+    ├── HomeFeedPage.kt              # 首页（推荐流 / 热聊 / 逛吧 三模式）
+    ├── HotTopicPage.kt              # 热话题榜（双列卡片）
+    ├── TopicDetailPage.kt           # 话题详情页
+    ├── TopicDetailActivity.kt       # 话题详情 Activity 外壳
     ├── ProfilePage.kt               # 「我的」页（账号 / 关注的吧 / 最近逛过 / 快捷入口）
     ├── BlockPage.kt                 # 屏蔽管理（关键词 / 用户 黑名单与白名单）
     ├── ThreadDetailPage.kt          # 帖子详情页
