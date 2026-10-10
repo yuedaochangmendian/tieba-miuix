@@ -195,8 +195,7 @@ private fun TiebaApp(app: TiebaApplication) {
                             )
                         },
                         onOpenForum = { name ->
-                            keyword = name
-                            selectedTab = TAB_HOME
+                            context.startActivity(ForumDetailActivity.intent(context, name))
                         },
                     )
 
