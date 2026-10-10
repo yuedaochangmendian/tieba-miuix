@@ -10,6 +10,9 @@ import com.tieba.miuix.protocol.ForumHome
 import com.tieba.miuix.protocol.ForumSearchResult
 import com.tieba.miuix.protocol.FrsPageProto
 import com.tieba.miuix.protocol.ForumSearchPostResult
+import com.tieba.miuix.protocol.MessageCounts
+import com.tieba.miuix.protocol.MessageList
+import com.tieba.miuix.protocol.MessageType
 import com.tieba.miuix.protocol.PbFloorProto
 import com.tieba.miuix.protocol.PbPageProto
 import com.tieba.miuix.protocol.ReplyResult
@@ -432,6 +435,7 @@ class TiebaRepository(
             host = TiebaConst.APP_BASE_HOST,
             path = "/c/c/post/add",
             params = params,
+            cookie = cookieHeader(),
         )
         ReplyResult.parse(json)
     }
@@ -492,6 +496,7 @@ class TiebaRepository(
             host = TiebaConst.APP_BASE_HOST,
             path = "/c/c/thread/add",
             params = params,
+            cookie = cookieHeader(),
         )
         ReplyResult.parse(json)
     }
@@ -523,6 +528,7 @@ class TiebaRepository(
                     "stoken" to credentials.stoken,
                     "_client_version" to TiebaConst.LATEST_VERSION,
                 ),
+                cookie = cookieHeader(),
             )
             StoredThreads.parse(json)
         }
@@ -544,8 +550,62 @@ class TiebaRepository(
                 "stoken" to credentials.stoken,
                 "_client_version" to TiebaConst.LATEST_VERSION,
             ),
+            cookie = cookieHeader(),
         )
         ConcernedForums.parse(json)
+    }
+
+    /**
+     * 消息中心：回复我的 / @我的。
+     *
+     * 走的是 App 的表单通道（不是网页端），正文里 `pn` 是唯一的业务参数，
+     * 登录态由 Cookie 提供。匿名时服务端返回
+     * `error_code=1 用户未登录或登录失败`，这里先在本地拦一道。
+     */
+    suspend fun getMessages(type: MessageType, pn: Int = 1): MessageList = withContext(Dispatchers.IO) {
+        val credentials = credentialsProvider()
+        if (!credentials.isLoggedIn) {
+            return@withContext MessageList(
+                currentPage = pn,
+                errorCode = "1",
+                errorMessage = "还没有登录",
+            )
+        }
+        val json = WebHttp.postFormJson(
+            host = TiebaConst.APP_BASE_HOST,
+            path = type.path,
+            params = listOf(
+                "pn" to pn.coerceAtLeast(1).toString(),
+                "_client_version" to TiebaConst.LATEST_VERSION,
+            ),
+            cookie = cookieHeader(),
+        )
+        MessageList.parse(json, type)
+    }
+
+    /**
+     * 未读数量（`POST /c/s/msg` 带 `bookmark=1`）。
+     *
+     * 这个接口匿名时也返回 `error_code=0`，只是 `message` 是个空对象，
+     * 所以判断依据是字段而不是错误码。
+     */
+    suspend fun getMessageCounts(): MessageCounts = withContext(Dispatchers.IO) {
+        val credentials = credentialsProvider()
+        if (!credentials.isLoggedIn) {
+            return@withContext MessageCounts()
+        }
+        val json = runCatching {
+            WebHttp.postFormJson(
+                host = TiebaConst.APP_BASE_HOST,
+                path = "/c/s/msg",
+                params = listOf(
+                    "bookmark" to "1",
+                    "_client_version" to TiebaConst.LATEST_VERSION,
+                ),
+                cookie = cookieHeader(),
+            )
+        }.getOrNull() ?: return@withContext MessageCounts()
+        MessageCounts.parse(json)
     }
 
     /**
@@ -596,6 +656,7 @@ class TiebaRepository(
                 "stoken" to credentials.stoken,
                 "_client_version" to TiebaConst.LATEST_VERSION,
             ),
+            cookie = cookieHeader(),
         )
         CommonResult.of(json)
     }
@@ -639,6 +700,7 @@ class TiebaRepository(
                 "stoken" to credentials.stoken,
                 "_client_version" to TiebaConst.LATEST_VERSION,
             ),
+            cookie = cookieHeader(),
         )
         CommonResult.of(json)
     }
@@ -688,6 +750,7 @@ class TiebaRepository(
                 "stoken" to credentials.stoken,
                 "_client_version" to TiebaConst.LATEST_VERSION,
             ),
+            cookie = cookieHeader(),
         )
         CommonResult.of(json)
     }
@@ -736,6 +799,7 @@ class TiebaRepository(
                 host = TiebaConst.APP_BASE_HOST,
                 path = if (follow) "/c/c/user/follow" else "/c/c/user/unfollow",
                 params = base,
+                cookie = cookieHeader(),
             )
             CommonResult.of(json)
         }
@@ -775,6 +839,7 @@ class TiebaRepository(
                 "user_id" to credentials.uid,
                 "_client_version" to TiebaConst.LATEST_VERSION,
             ),
+            cookie = cookieHeader(),
         )
         SignResult.parseSingle(json)
     }
@@ -816,6 +881,7 @@ class TiebaRepository(
                 "authsid" to "null",
                 "_client_version" to TiebaConst.LATEST_VERSION,
             ),
+            cookie = cookieHeader(),
         )
         SignResult.parseBatch(json)
     }
@@ -854,6 +920,25 @@ class TiebaRepository(
             if (tbs.isNotEmpty()) return@withContext tbs
         }
         ""
+    }
+
+    /**
+     * 需要登录的接口要把凭证放在 Cookie 里发出去。
+     *
+     * **这是踩过的坑**：`/c/c/post/add`、`/c/c/forum/sign`、`/c/f/post/threadstore`
+     * 这些接口的服务端只认 Cookie，正文里带不带 `bduss` 字段都不看；只发表单不带
+     * Cookie 时统一返回 `error_code=1 用户未登录或登录失败`。所以凡是「未登录时
+     * 服务端会拒绝」的请求，都要走这个函数。
+     */
+    private fun cookieHeader(): String {
+        val credentials = credentialsProvider()
+        if (!credentials.isLoggedIn) return ""
+        return buildString {
+            append("BDUSS=").append(credentials.bduss)
+            if (credentials.stoken.isNotEmpty()) {
+                append("; STOKEN=").append(credentials.stoken)
+            }
+        }
     }
 }
 

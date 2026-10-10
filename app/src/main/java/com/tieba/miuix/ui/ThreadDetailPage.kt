@@ -79,6 +79,7 @@ fun ThreadDetailPage(
     title: String,
     forumName: String,
     onBack: () -> Unit,
+    focusPostId: Long = 0L,
 ) {
     val scope = rememberCoroutineScope()
     val scrollBehavior = MiuixScrollBehavior()
@@ -135,13 +136,17 @@ fun ThreadDetailPage(
     LaunchedEffect(posts, tid) {
         if (!restoringPosition) return@LaunchedEffect
         if (posts.isEmpty()) return@LaunchedEffect
-        val target = historyStore.readPosition(tid)
+        // 从消息中心点进来时代入了目标 pid，优先定位到那一层。
+        val focus = focusPostId.takeIf { it > 0L }
+        val target = focus ?: historyStore.readPosition(tid)
         restoringPosition = false
         if (target == 0L) return@LaunchedEffect
         val index = posts.indexOfFirst { it.id == target }
         if (index > 0) {
             listState.scrollToItem(index)
-            note = "已回到上次读到的位置"
+            note = if (focus != null) "已定位到这条回复" else "已回到上次读到的位置"
+        } else if (focus != null) {
+            note = "这条回复不在第一页，可以翻页找找"
         }
     }
 

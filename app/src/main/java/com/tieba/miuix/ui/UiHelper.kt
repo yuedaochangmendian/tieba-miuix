@@ -134,6 +134,31 @@ fun formatRelativeTime(millis: Long): String {
 /** 主题帖的网页地址，用于分享与深链。 */
 fun threadWebUrl(tid: Long): String = "https://tieba.baidu.com/p/" + tid
 
+/** 帖子详情里某一层的链接（带 `pid`，贴吧客户端能直接定位到楼层）。 */
+fun postWebUrl(tid: Long, pid: Long): String =
+    "https://tieba.baidu.com/p/" + tid + "?pid=" + pid
+
+/**
+ * 相对时间（入参是**秒**）：刚刚 / N 分钟前 / N 小时前 / N 天前，超过 7 天退回日期。
+ *
+ * 与 [formatRelativeTime] 的区别是入参单位：那个收毫秒，这个是贴吧接口常见的秒。
+ * 少数接口给的是毫秒（大于 1e11 就按毫秒处理），所以这里做了一次自动判别。
+ */
+fun formatRelativeSeconds(seconds: Long, now: Long = System.currentTimeMillis()): String {
+    if (seconds <= 0L) return ""
+    val target = if (seconds < 100000000000L) seconds * 1000L else seconds
+    val diff = now - target
+    if (diff < 0) return formatTime(seconds)
+    val minutes = diff / 60000L
+    return when {
+        minutes < 1L -> "刚刚"
+        minutes < 60L -> minutes.toString() + " 分钟前"
+        minutes < 1440L -> (minutes / 60L).toString() + " 小时前"
+        minutes < 10080L -> (minutes / 1440L).toString() + " 天前"
+        else -> formatTime(seconds)
+    }
+}
+
 /** 把一个帖子的链接复制到剪贴板。 */
 fun copyThreadLink(context: Context, tid: Long): Boolean {
     if (tid <= 0L) return false

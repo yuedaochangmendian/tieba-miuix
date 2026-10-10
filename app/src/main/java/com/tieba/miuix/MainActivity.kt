@@ -15,6 +15,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,11 +27,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +60,7 @@ import com.tieba.miuix.ui.LocalRepository
 import com.tieba.miuix.ui.LocalSearchHistoryStore
 import com.tieba.miuix.ui.LocalSettingsStore
 import com.tieba.miuix.ui.LoginActivity
+import com.tieba.miuix.ui.MessagesPage
 import com.tieba.miuix.ui.SearchPage
 import com.tieba.miuix.ui.SettingsPage
 import com.tieba.miuix.ui.ThreadDetailActivity
@@ -70,18 +75,20 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.Home
+import top.yukonga.miuix.kmp.icon.extended.Messages
 import top.yukonga.miuix.kmp.icon.extended.Recent
 import top.yukonga.miuix.kmp.icon.extended.Search
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
-/** 底部导航的四个入口。 */
+/** 底部导航的五个入口。 */
 private const val TAB_HOME = 0
-private const val TAB_SEARCH = 1
-private const val TAB_FAVORITES = 2
-private const val TAB_HISTORY = 3
-private const val TAB_SETTINGS = 4
+private const val TAB_MESSAGES = 1
+private const val TAB_SEARCH = 2
+private const val TAB_FAVORITES = 3
+private const val TAB_HISTORY = 4
+private const val TAB_SETTINGS = 5
 /**
  * 唯一的 Activity。
  *
@@ -131,7 +138,6 @@ private data class BottomTab(
     val icon: ImageVector,
     val index: Int,
 )
-
 @Composable
 private fun TiebaApp(app: TiebaApplication) {
     val repository: TiebaRepository = app.repository
@@ -172,6 +178,7 @@ private fun TiebaApp(app: TiebaApplication) {
     val tabs = remember {
         listOf(
             BottomTab("首页", MiuixIcons.Home, TAB_HOME),
+            BottomTab("消息", MiuixIcons.Messages, TAB_MESSAGES),
             BottomTab("搜索", MiuixIcons.Search, TAB_SEARCH),
             BottomTab("我的", MiuixIcons.Favorites, TAB_FAVORITES),
             BottomTab("历史", MiuixIcons.Recent, TAB_HISTORY),
@@ -180,6 +187,17 @@ private fun TiebaApp(app: TiebaApplication) {
     }
     val bottomPadding = 72.dp
 
+    // 未读消息数：登录后拉一次，切回消息页时再对齐一次。
+    var unreadCount by remember { mutableIntStateOf(0) }
+    LaunchedEffect(accountStore.isLoggedIn, selectedTab) {
+        if (!accountStore.isLoggedIn) {
+            unreadCount = 0
+            return@LaunchedEffect
+        }
+        val counts = runCatching { repository.getMessageCounts() }.getOrNull()
+        unreadCount = counts?.let { it.replyMe + it.atMe } ?: 0
+    }
+
     CompositionLocalProvider(
         LocalRequestLogin provides requestLogin,
         LocalLoginNote provides loginNote,
@@ -187,6 +205,24 @@ private fun TiebaApp(app: TiebaApplication) {
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(1f)) {
                 when (selectedTab) {
+                    TAB_MESSAGES -> MessagesPage(
+                        bottomPadding = bottomPadding,
+                        onOpenThread = { tid, title, forumName, postId ->
+                            context.startActivity(
+                                ThreadDetailActivity.intent(
+                                    context,
+                                    tid,
+                                    title,
+                                    forumName,
+                                    postId,
+                                ),
+                            )
+                        },
+                        onOpenUser = { portrait, uid ->
+                            context.startActivity(UserPageActivity.intent(context, portrait, uid))
+                        },
+                    )
+
                     TAB_SEARCH -> SearchPage(
                         bottomPadding = bottomPadding,
                         onOpenThread = { tid, forumName ->
@@ -250,17 +286,21 @@ private fun TiebaApp(app: TiebaApplication) {
             BottomBar(
                 tabs = tabs,
                 selectedTab = selectedTab,
+                badgeCount = unreadCount,
+                badgeTabIndex = TAB_MESSAGES,
                 onSelect = { selectedTab = it },
             )
         }
     }
 }
 
-/** 底部导航栏：四个等宽入口，选中项高亮。 */
+/** 底部导航栏：等宽入口，选中项高亮，未读数用角标显示在「消息」上。 */
 @Composable
 private fun BottomBar(
     tabs: List<BottomTab>,
     selectedTab: Int,
+    badgeCount: Int,
+    badgeTabIndex: Int,
     onSelect: (Int) -> Unit,
 ) {
     Row(
@@ -297,11 +337,30 @@ private fun BottomBar(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Icon(
-                        imageVector = tab.icon,
-                        contentDescription = tab.label,
-                        modifier = Modifier.size(22.dp),
-                    )
+                    Box(contentAlignment = Alignment.TopEnd) {
+                        Icon(
+                            imageVector = tab.icon,
+                            contentDescription = tab.label,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        if (tab.index == badgeTabIndex && badgeCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .offset(x = 8.dp, y = (-4).dp)
+                                    .background(
+                                        color = MiuixTheme.colorScheme.error,
+                                        shape = CircleShape,
+                                    )
+                                    .padding(horizontal = 4.dp, vertical = 1.dp),
+                            ) {
+                                Text(
+                                    text = if (badgeCount > 99) "99+" else badgeCount.toString(),
+                                    style = MiuixTheme.textStyles.footnote2,
+                                    color = MiuixTheme.colorScheme.onError,
+                                )
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(text = tab.label, style = MiuixTheme.textStyles.footnote2)
                 }

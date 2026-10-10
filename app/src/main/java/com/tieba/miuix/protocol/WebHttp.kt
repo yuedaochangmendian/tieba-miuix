@@ -70,6 +70,10 @@ internal object WebHttp {
      *
      * @param useAppSign 是否追加 App 签名（`Sign.sign` + `APP_SALT`），
      *   `c.tieba.baidu.com` 的接口基本都要
+     * @param cookie 需要登录的接口必须把 `BDUSS=...; STOKEN=...` 一起带上。
+     *   **服务端认的是 Cookie，不是表单里的 bduss 字段**：正文参数写对了但没带
+     *   Cookie 时，收藏 / 签到 / 回帖这些接口一律返回
+     *   `error_code=1 用户未登录或登录失败`。
      */
     fun postFormJson(
         host: String,
@@ -77,6 +81,7 @@ internal object WebHttp {
         params: List<Pair<String, String>>,
         useAppSign: Boolean = true,
         referer: String? = null,
+        cookie: String? = null,
     ): JSONObject {
         val all: List<Pair<String, String>> = if (useAppSign) {
             params + ("sign" to Sign.sign(params.toMap(), TiebaConst.APP_SALT))
@@ -94,7 +99,7 @@ internal object WebHttp {
         val request = Request.Builder()
             .url("https://" + host + path)
             .post(body)
-            .webHeaders(referer, userAgent)
+            .webHeaders(referer, userAgent, cookie)
             .build()
         return executeJson(request)
     }
@@ -109,6 +114,7 @@ internal object WebHttp {
     private fun Request.Builder.webHeaders(
         referer: String?,
         userAgent: String = TiebaConst.WEB_USER_AGENT,
+        cookie: String? = null,
     ): Request.Builder = apply {
         header("User-Agent", userAgent)
         header("Accept", "application/json, text/plain, */*")
@@ -116,6 +122,9 @@ internal object WebHttp {
         header("Cache-Control", "no-cache")
         header("Pragma", "no-cache")
         header("X-Requested-With", "com.baidu.tieba")
+        if (!cookie.isNullOrEmpty()) {
+            header("Cookie", cookie)
+        }
         if (!referer.isNullOrEmpty()) {
             header("Referer", referer)
         }
