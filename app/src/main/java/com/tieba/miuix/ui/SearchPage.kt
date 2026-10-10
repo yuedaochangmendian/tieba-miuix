@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package com.tieba.miuix.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -373,6 +375,7 @@ private fun UserResultList(
     loading: Boolean,
     bottomPadding: Dp,
 ) {
+    val context = LocalContext.current
     if (!searched) {
         CenterHint(text = "输入关键词后可以搜吧、搜帖、搜用户")
         return
@@ -396,6 +399,9 @@ private fun UserResultList(
                 cornerRadius = 12.dp,
                 insideMargin = PaddingValues(14.dp),
                 colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceContainer),
+                pressFeedbackType = PressFeedbackType.Sink,
+                showIndication = true,
+                onClick = { openUserPage(context, item.portrait, item.id) },
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     SafeImage(
@@ -444,6 +450,7 @@ private fun ThreadResultList(
     onLoadMore: () -> Unit,
     onHistoryClick: (String) -> Unit,
 ) {
+    val context = LocalContext.current
     if (!searched) {
         SearchHistoryHint(history = history, bottomPadding = bottomPadding, onClick = onHistoryClick)
         return
@@ -495,11 +502,26 @@ private fun ThreadResultList(
                         }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
+                    if (item.authorName.isNotEmpty()) {
+                        Text(
+                            text = item.authorName,
+                            modifier = Modifier.clickable(enabled = item.authorPortrait.isNotEmpty()) {
+                                openUserPage(context, item.authorPortrait, item.authorUid)
+                            },
+                            style = MiuixTheme.textStyles.footnote2,
+                            color = if (item.authorPortrait.isNotEmpty()) {
+                                MiuixTheme.colorScheme.primary
+                            } else {
+                                MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     Text(
                         text = buildString {
                             if (item.forumName.isNotEmpty()) append(item.forumName).append(" · ")
-                            append(item.authorName.ifEmpty { "匿名" })
-                            append(" · ").append(formatCount(item.replyNum)).append(" 回复")
+                            append(formatCount(item.replyNum)).append(" 回复")
                             if (item.agreeNum > 0) append(" · ").append(formatCount(item.agreeNum)).append(" 赞")
                         },
                         style = MiuixTheme.textStyles.footnote2,

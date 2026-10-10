@@ -81,6 +81,8 @@ data class ThreadSearchItem(
     val content: String = "",
     val forumName: String = "",
     val authorName: String = "",
+    val authorPortrait: String = "",
+    val authorUid: Long = 0,
     val replyNum: Int = 0,
     val agreeNum: Int = 0,
     val time: Long = 0,
@@ -108,6 +110,8 @@ data class ThreadSearchItem(
                 forumName = json.optString("forum_name"),
                 authorName = user?.optString("show_nickname")?.ifEmpty { user.optString("user_name") }
                     ?: "",
+                authorPortrait = user?.optString("portrait").orEmpty(),
+                authorUid = user?.optLongOrString("user_id") ?: 0L,
                 replyNum = json.optIntFromString("post_num"),
                 agreeNum = json.optIntFromString("like_num"),
                 time = json.optLongOrString("time"),

@@ -26,6 +26,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -253,6 +254,7 @@ fun ThreadDetailPage(
                             viewerImages = images
                             viewerIndex = index
                         },
+                        onOpenUser = { portrait, uid -> openUserPage(context, portrait, uid) },
                     )
                 }
 
@@ -387,8 +389,10 @@ private fun ToolbarButton(
 private fun PostCard(
     post: Post,
     onOpenImages: (List<ImageItem>, Int) -> Unit,
+    onOpenUser: (portrait: String, uid: Long) -> Unit,
 ) {
     val images = post.content.toImages()
+    val context = LocalContext.current
 
     Card(
         modifier = Modifier
@@ -399,9 +403,16 @@ private fun PostCard(
         colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceContainer),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            val authorName = post.authorName.ifBlank { "匿名用户" }
+            val portrait = post.author?.portrait.orEmpty()
+            val authorUid = post.authorId.takeIf { it > 0L } ?: post.author?.id ?: 0L
             Text(
-                text = post.authorName.ifBlank { "匿名用户" },
-                modifier = Modifier.weight(1f, fill = false),
+                text = authorName,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .clickable(enabled = portrait.isNotEmpty()) {
+                        onOpenUser(portrait, authorUid)
+                    },
                 style = MiuixTheme.textStyles.footnote1,
                 color = MiuixTheme.colorScheme.primary,
                 maxLines = 1,
@@ -470,6 +481,9 @@ private fun PostCard(
 
 @Composable
 private fun SubPostItem(sub: SubPostList) {
+    val context = LocalContext.current
+    val portrait = sub.author?.portrait.orEmpty()
+    val uid = sub.authorId.takeIf { it > 0L } ?: sub.author?.id ?: 0L
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -477,6 +491,9 @@ private fun SubPostItem(sub: SubPostList) {
     ) {
         Text(
             text = sub.author?.displayName?.ifBlank { "匿名用户" } ?: "匿名用户",
+            modifier = Modifier.clickable(enabled = portrait.isNotEmpty()) {
+                openUserPage(context, portrait, uid)
+            },
             style = MiuixTheme.textStyles.footnote2,
             color = MiuixTheme.colorScheme.primary,
         )

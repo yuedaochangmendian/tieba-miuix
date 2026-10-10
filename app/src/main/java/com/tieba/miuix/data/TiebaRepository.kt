@@ -13,6 +13,8 @@ import com.tieba.miuix.protocol.TiebaConst.PostSortType
 import com.tieba.miuix.protocol.ProtoHttp
 import com.tieba.miuix.protocol.ThreadSearchItem
 import com.tieba.miuix.protocol.ThreadSearchResult
+import com.tieba.miuix.protocol.UserCard
+import com.tieba.miuix.protocol.UserPostResult
 import com.tieba.miuix.protocol.TiebaConst.ThreadSortType
 import com.tieba.miuix.protocol.TiebaConst
 import com.tieba.miuix.protocol.UserSearchResult
@@ -150,6 +152,59 @@ class TiebaRepository(
             ),
         )
         ForumDetailProto.parse(bytes)
+    }
+
+    /**
+     * 用户发言流（`POST /c/u/feed/userpost`，表单）。
+     *
+     * 主题与回复走同一个接口，靠 [isThread] 区分；`uid` 用名片里的 `tieba_uid`。
+     * 走 `APP_BASE_HOST` 时 [WebHttp.postFormJson] 会自动用 APP_SALT 签名。
+     */
+    suspend fun getUserPosts(
+        uid: Long,
+        pn: Int = 1,
+        rn: Int = 20,
+        isThread: Boolean = true,
+    ): UserPostResult = withContext(Dispatchers.IO) {
+        if (uid <= 0L) return@withContext UserPostResult()
+        val json = WebHttp.postFormJson(
+            host = TiebaConst.APP_BASE_HOST,
+            path = "/c/u/feed/userpost",
+            params = listOf(
+                "_client_version" to TiebaConst.LATEST_VERSION,
+                "uid" to uid.toString(),
+                "pn" to pn.toString(),
+                "rn" to rn.toString(),
+                "is_thread" to if (isThread) "1" else "0",
+                "need_content" to "1",
+            ),
+        )
+        UserPostResult.parse(json)
+    }
+
+    /**
+     * 用户名片（网页端 `GET /c/u/pc/userCard`）。
+     *
+     * 只要 `portrait` 就能查，**匿名可用**：昵称、吧龄、获赞/粉丝/关注数、
+     * 个性签名、IP 归属地都在里面（实测响应里**没有** user_id / tieba_uid）。
+     * 这个接口要按 `PC_SALT` 签名。
+     *
+     * 注意：接口只认裸 portrait（`tb.1.xxx`）。实测传完整 URL 或带 `?t=` 的
+     * 尾巴都会返回 `error_code=210009 系统错误`，所以这里统一归一后再发。
+     */
+    suspend fun getUserCard(portrait: String): UserCard? = withContext(Dispatchers.IO) {
+        val bare = barePortrait(portrait)
+        if (bare.isEmpty()) return@withContext null
+        val json = WebHttp.getJson(
+            path = "/c/u/pc/userCard",
+            params = listOf(
+                "portrait" to bare,
+                "subapp_type" to "pc",
+                "_client_type" to "20",
+            ),
+            signSalt = TiebaConst.PC_SALT,
+        )
+        UserCard.parse(json)
     }
 
     /**
@@ -299,6 +354,23 @@ class TiebaRepository(
  *
  * 实测两种形态都要兼容：JSON 的 `{"tbs":"..."}` 与 HTML/JS 里的 `tbs = '...'`。
  */
+/**
+ * 从一个 portrait 里取出裸标识（`tb.1.xxx`）。
+ *
+ * 这个值在工程里有四种形态：帖子里拿到的裸串、网页接口给的完整 URL、
+ * 带 `?t=` 缓存时间戳的尾巴、以及搜索接口带上的 `.jpg` 后缀。用户名片接口
+ * 只认纯标识，统一在这里归一。
+ */
+internal fun barePortrait(portrait: String): String {
+    val clean = portrait.trim().substringBefore('?')
+    if (clean.isEmpty()) return ""
+    val marker = "/item/"
+    val index = clean.lastIndexOf(marker)
+    val bare = if (index >= 0) clean.substring(index + marker.length) else clean
+    // 搜索接口会拼成 `tb.1.xxx.jpg`，但名片接口不认后缀。
+    return bare.substringBeforeLast('.', bare)
+}
+
 internal fun extractTbs(body: String): String {
     if (body.isEmpty()) return ""
     Regex("""["']tbs["']\s*[:=]\s*["']([0-9a-zA-Z]{10,})["']""")

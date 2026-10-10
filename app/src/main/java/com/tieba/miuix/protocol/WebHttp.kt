@@ -41,14 +41,22 @@ internal object WebHttp {
      * @param path 形如 `/mo/q/search/forum`（不要带前导主机名）
      * @param params 查询参数，顺序即拼进 URL 的顺序
      * @param referer 需要时传 [hybridReferer]
+     * @param signSalt 需要签名的接口传对应的盐（如 [TiebaConst.PC_SALT]），
+     *   签名值是拼在所有参数之后的最后一个参数
      */
     fun getJson(
         path: String,
         params: List<Pair<String, String>>,
         referer: String? = null,
+        signSalt: String? = null,
     ): JSONObject {
+        val all = if (signSalt != null) {
+            params + ("sign" to Sign.sign(params.toMap(), signSalt))
+        } else {
+            params
+        }
         val builder = ("https://" + TiebaConst.WEB_BASE_HOST + path).toHttpUrl().newBuilder()
-        params.forEach { (key, value) -> builder.addQueryParameter(key, value) }
+        all.forEach { (key, value) -> builder.addQueryParameter(key, value) }
         val request = Request.Builder()
             .url(builder.build())
             .get()

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package com.tieba.miuix.ui
 
+import android.content.Context
 import android.content.Intent
 import com.tieba.miuix.data.DarkMode
 import com.tieba.miuix.data.ImageLoadMode
@@ -66,6 +67,21 @@ fun Settings.shouldLoadImage(onWifi: Boolean): Boolean = when (imageLoadMode) {
     ImageLoadMode.NEVER -> false
     // 智能省流量 / 智能无图：只在 Wi-Fi 下加载。
     else -> onWifi
+}
+
+/**
+ * 打开用户资料页。
+ *
+ * [portrait] 允许是纯串（`tb.1.xxx`）或完整 URL，两处入口的取值形态不一样，
+ * 统一在这里做非空判断，避免到处写同样的守卫。
+ *
+ * [uid] 可选：`userCard` 接口不返回用户 ID，但从搜索结果或楼层数据里
+ * 通常已经知道 uid，带上它资料页才能列出这个人的发言。
+ */
+fun openUserPage(context: Context, portrait: String, uid: Long = 0L): Boolean {
+    if (portrait.isBlank()) return false
+    context.startActivity(UserPageActivity.intent(context, portrait, uid))
+    return true
 }
 
 /** 把接口返回的秒级时间戳格式化成可读文本。 */
