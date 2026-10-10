@@ -10,11 +10,11 @@
 
 **浏览（不需要登录）**
 
+- **首页推荐流**：默认展示全站推荐帖（`/c/f/forum/hotThreadList`，cmd=309661，匿名可读），
+  卡片含作者、回复数、赞数、首楼正文预览与配图；首页顶部可在「推荐 / 逛吧」之间切换。
 - **吧列表页**：输入吧名进入（输入时会实时给出候选吧，避免拼错）；三种排序（回复时间 / 最新发布 / 热门）；
   帖子卡片展示标题、正文预览、精品标记、作者、回复数、赞数；下拉刷新 + 上拉加载更多；
   悬浮按钮可切换为回顶 / 刷新 / 隐藏。
-- **首页快捷入口**：`/mg/o/getForumHome` 下发的热门吧横向列表，以及「最近逛过的吧」
-  （浏览历史里记录过的吧，最多 10 个）。
 - **帖子详情页**：楼层列表（楼主 / N 楼、时间、正文、楼中楼、赞数）、只看楼主、倒序、
   跳页、下拉刷新 + 上拉加载更多、分享、复制链接、进入所属吧。
 - **楼中楼**：楼层内「查看 N 条回复」按需拉取（`/c/f/pb/floor`，匿名可读），
@@ -41,6 +41,8 @@
 - **关注用户**：用户资料页的关注 / 取关（`/c/c/user/follow`、`/c/c/user/unfollow`）。
 - **收藏**：帖子详情顶栏收藏按钮、帖子长按菜单收藏；「我的」页可以查看收藏的帖子
   （长按可取消收藏）。
+- **我的页**：账号卡片（未登录时可直接登录），**关注的吧列表**（含等级与签到状态，可一键签到全部），
+  最近逛过的吧，以及收藏、浏览历史、搜索历史、设置的快捷入口。
 - **关注吧**：「我的 → 关注的吧」列出所有关注的吧；吧详情页可关注 / 取关。
 - **签到**：吧详情页签到单个吧；「我的 → 关注的吧」可一键签到全部关注的吧。
 - **消息中心**：底部导航「消息」Tab，分「回复我的」与「@我的」两栏，支持下拉刷新与翻页；
@@ -70,7 +72,7 @@
 
 ```
 app/src/main/java/com/tieba/miuix/
-├── MainActivity.kt                  # 入口：底部导航（首页 / 搜索 / 我的 / 历史 / 设置）
+├── MainActivity.kt                  # 入口：底部导航（首页 / 消息 / 搜索 / 我的 / 历史 / 设置）
 ├── TiebaApplication.kt              # Application：全局 Repository 与各 Store
 ├── data/
 │   ├── TiebaRepository.kt           # 所有接口调用（读取 / 搜索 / 登录 / 写操作）
@@ -85,6 +87,8 @@ app/src/main/java/com/tieba/miuix/
 │   ├── CommonReq.kt                 # 公共请求头
 │   ├── FrsPageProto.kt              # 吧列表（cmd=301001）
 │   ├── PbPageProto.kt               # 帖子列表（cmd=302001）
+│   ├── HotThreadListProto.kt        # 首页推荐流（cmd=309661）
+│   ├── Messages2.kt                 # 消息中心模型（回复我的 / @我的 / 未读数）
 │   ├── ForumDetailProto.kt          # 吧详情（cmd=303021，含吧内主题帖）
 │   ├── ForumHome.kt                 # 首页热门吧 / 关注的吧
 │   ├── UserCard.kt                  # 用户名片
@@ -96,13 +100,16 @@ app/src/main/java/com/tieba/miuix/
 │   └── TiebaHttp.kt / WebHttp.kt    # OkHttp 请求（protobuf 通道 / 网页通道）
 └── ui/
     ├── AppLocals.kt                 # CompositionLocal（仓库与各 Store）
-    ├── ForumListPage.kt             # 吧列表页（含首页快捷入口）
+    ├── ForumListPage.kt             # 吧列表页（也可嵌入首页的「逛吧」模式）
+    ├── HomeFeedPage.kt              # 首页（推荐流 / 逛吧 双模式）
+    ├── ProfilePage.kt               # 「我的」页（账号 / 关注的吧 / 最近逛过 / 快捷入口）
     ├── ThreadDetailPage.kt          # 帖子详情页
     ├── ThreadDetailActivity.kt      # 帖子详情 Activity 外壳
     ├── ForumDetailActivity.kt       # 吧详情页
     ├── UserPage.kt / UserPageActivity.kt   # 用户资料页
     ├── SearchPage.kt                # 搜索页
-    ├── FavoritesPage.kt             # 「我的」页（收藏 / 关注的吧）
+    ├── MessagesPage.kt              # 消息中心（回复我的 / @我的）
+    ├── FavoritesPage.kt             # 收藏的帖子
     ├── HistoryPage.kt               # 浏览历史页
     ├── SettingsPage.kt              # 设置页（含账号）
     ├── LoginActivity.kt             # WebView 登录
