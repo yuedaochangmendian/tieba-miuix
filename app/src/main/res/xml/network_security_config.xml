@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  贴吧 APP 端部分接口（如 /c/f/frs/page）历史上仅提供 HTTP，
+  因此需要为 tiebac.baidu.com 单独放开明文流量，其余域名仍强制 HTTPS。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">baidu.com</domain>
+        <domain includeSubdomains="true">baidubce.com</domain>
+        <domain includeSubdomains="true">bdstatic.com</domain>
+        <domain includeSubdomains="true">hdslb.com</domain>
+    </domain-config>
+</network-security-config>
