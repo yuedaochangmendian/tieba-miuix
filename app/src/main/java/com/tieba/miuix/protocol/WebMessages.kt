@@ -141,7 +141,14 @@ data class UserSearchItem(
     val displayName: String get() = nameShow.ifEmpty { name }
 
     val portraitUrl: String
-        get() = if (portrait.isEmpty()) "" else "https://tb.himg.baidu.com/sys/portrait/item/$portrait"
+        get() = when {
+            portrait.isEmpty() -> ""
+            // 实测 `/mo/q/search/user` 返回的 portrait 已经是完整的 https 链接
+            // （gss0.bdstatic.com/.../sys/portrait/item/...），只有 App 协议的老接口
+            // 才返回裸文件名，所以两种形态都要接住。
+            portrait.startsWith("http", ignoreCase = true) -> portrait
+            else -> "https://tb.himg.baidu.com/sys/portrait/item/$portrait"
+        }
 
     companion object {
         fun parse(json: JSONObject, exact: Boolean): UserSearchItem = UserSearchItem(

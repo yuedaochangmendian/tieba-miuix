@@ -12,8 +12,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,11 +30,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tieba.miuix.data.TiebaRepository
+import com.tieba.miuix.protocol.ForumHome
 import com.tieba.miuix.protocol.Page
 import com.tieba.miuix.protocol.SimpleForum
 import com.tieba.miuix.protocol.ThreadInfo
@@ -90,6 +94,7 @@ fun ForumListPage(
     var isRefreshing by remember { mutableStateOf(false) }
     var isLoadingMore by remember { mutableStateOf(false) }
     var hasLoaded by remember { mutableStateOf(false) }
+    var forumHome by remember { mutableStateOf<ForumHome?>(null) }
 
     suspend fun load(targetPage: Int, replace: Boolean) {
         if (forumName.isBlank()) return
@@ -120,6 +125,12 @@ fun ForumListPage(
 
     LaunchedEffect(forumName, sortType) {
         load(targetPage = 1, replace = true)
+    }
+
+    // 首页的「关注的吧 / 热门吧」只在真正进入某个吧之后才没必要再加载，
+    // 所以这里只在首次进页面时抓一次；失败时静默降级（那一块直接不显示）。
+    LaunchedEffect(Unit) {
+        runCatching { repository.getForumHome() }.getOrNull()?.let { forumHome = it }
     }
 
     Scaffold(
@@ -181,6 +192,21 @@ fun ForumListPage(
                 if (message != null) {
                     item(key = "error") {
                         MessageCard(text = message, isError = true)
+                    }
+                }
+
+                // 还没进入任何吧时，顶部给一条「关注的吧 / 热门吧」快捷入口。
+                val home = forumHome
+                if (forumName.isBlank() && home != null && !home.isEmpty) {
+                    item(key = "forum-home") {
+                        ForumHomeCard(
+                            home = home,
+                            onPick = { picked ->
+                                keyword = picked
+                                onKeywordChange(picked)
+                                forumName = picked
+                            },
+                        )
                     }
                 }
 
@@ -357,6 +383,71 @@ private fun ThreadCard(
                 style = MiuixTheme.textStyles.footnote2,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             )
+        }
+    }
+}
+
+/**
+ * 首页的快捷入口卡：拿 `/mg/o/getForumHome` 的数据横排展示。
+ *
+ * 登录后优先显示关注的吧，未登录只有热门吧（服务端不下发 `concern_forum`）。
+ */
+@Composable
+private fun ForumHomeCard(
+    home: ForumHome,
+    onPick: (String) -> Unit,
+) {
+    val forums = home.display
+    if (forums.isEmpty()) return
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp),
+        cornerRadius = 12.dp,
+        insideMargin = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceContainer),
+    ) {
+        Text(
+            text = if (home.concerned.isNotEmpty()) "关注的吧" else "热门吧",
+            style = MiuixTheme.textStyles.footnote2,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        LazyRow {
+            items(items = forums, key = { it.id.toString() + "-" + it.name }) { item ->
+                Card(
+                    modifier = Modifier.padding(end = 8.dp),
+                    cornerRadius = 10.dp,
+                    insideMargin = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                    colors = CardDefaults.defaultColors(
+                        color = MiuixTheme.colorScheme.surfaceContainerHigh,
+                    ),
+                    pressFeedbackType = PressFeedbackType.Sink,
+                    showIndication = true,
+                    onClick = { onPick(item.name) },
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (item.avatarUrl.isNotEmpty()) {
+                            SafeImage(
+                                url = item.avatarUrl,
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(RoundedCornerShape(14.dp)),
+                                contentDescription = item.name,
+                                cornerRadius = 14.dp,
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        Text(
+                            text = item.name,
+                            style = MiuixTheme.textStyles.footnote1,
+                            color = MiuixTheme.colorScheme.onSurfaceContainer,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
         }
     }
 }

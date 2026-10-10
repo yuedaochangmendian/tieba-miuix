@@ -3,6 +3,7 @@
 package com.tieba.miuix.data
 
 import com.tieba.miuix.protocol.CommonReq
+import com.tieba.miuix.protocol.ForumHome
 import com.tieba.miuix.protocol.ForumSearchResult
 import com.tieba.miuix.protocol.FrsPageProto
 import com.tieba.miuix.protocol.ForumSearchPostResult
@@ -108,6 +109,22 @@ class TiebaRepository(
     }
 
     // ---------------------------------------------------------------- 搜索
+
+    /**
+     * 首页数据（网页端 `GET /mg/o/getForumHome`）。
+     *
+     * 这个接口**不需要登录**：实测匿名请求会返回 `errno = 0` 与 12 个热门吧
+     * （`data.recomm_forum`）。登录后服务端会额外给出 `data.concern_forum`
+     * （关注的吧），[ForumHome.parse] 两段都读。
+     */
+    suspend fun getForumHome(): ForumHome = withContext(Dispatchers.IO) {
+        val json = WebHttp.getJson(
+            path = "/mg/o/getForumHome",
+            params = listOf("subapp_type" to "pc", "_client_type" to "20"),
+            referer = "https://" + TiebaConst.WEB_BASE_HOST + "/",
+        )
+        ForumHome.parse(json)
+    }
 
     /**
      * 搜索吧（网页端 `GET /mo/q/search/forum`）。
