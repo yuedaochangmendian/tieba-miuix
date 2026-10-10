@@ -49,16 +49,6 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-
-/** 把接口返回的秒级时间戳格式化成可读文本。 */
-private fun formatTime(seconds: Long): String {
-    if (seconds <= 0L) return ""
-    return SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-        .format(Date(seconds * 1000L))
-}
 
 /** 楼层标签：一楼叫楼主，其余显示"N 楼"。 */
 private fun floorLabel(floor: Int): String = when {
@@ -307,57 +297,5 @@ private fun SubPostItem(sub: SubPostList) {
             style = MiuixTheme.textStyles.footnote1,
             color = MiuixTheme.colorScheme.onSurfaceContainer,
         )
-    }
-}
-
-@Composable
-private fun MessageCard(
-    text: String,
-    isError: Boolean,
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 10.dp),
-        cornerRadius = 12.dp,
-        insideMargin = PaddingValues(16.dp),
-        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceContainer),
-    ) {
-        Text(
-            text = text,
-            style = MiuixTheme.textStyles.footnote1,
-            color = if (isError) MiuixTheme.colorScheme.error else MiuixTheme.colorScheme.onSurfaceVariantSummary,
-        )
-    }
-}
-
-@Composable
-private fun LoadMoreRow(
-    hasMore: Boolean,
-    isLoading: Boolean,
-    visible: Boolean,
-    onLoadMore: () -> Unit,
-) {
-    if (!visible) return
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 4.dp, bottom = 8.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (hasMore) {
-            Button(onClick = onLoadMore, enabled = !isLoading) {
-                Text(
-                    text = if (isLoading) "加载中…" else "加载更多",
-                    style = MiuixTheme.textStyles.button,
-                )
-            }
-        } else {
-            Text(
-                text = "没有更多了",
-                style = MiuixTheme.textStyles.footnote2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            )
-        }
     }
 }

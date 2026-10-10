@@ -1,0 +1,231 @@
+// Copyright 2026, tieba-miuix contributors
+// SPDX-License-Identifier: Apache-2.0
+package com.tieba.miuix.protocol
+
+import org.json.JSONObject
+
+/**
+ * 吧搜索结果。
+ *
+ * 数据来自网页端 `GET /mo/q/search/forum`，响应形如：
+ * ```json
+ * { "no": 0, "error": "", "data": { "pn": 1, "has_more": 0,
+ *   "exact_match": { "forum_id": 1, "forum_name": "贴吧", ... },
+ *   "fuzzy_match": [ { ... } ] } }
+ * ```
+ */
+data class ForumSearchItem(
+    val id: Long = 0,
+    val name: String = "",
+    val nameShow: String = "",
+    val avatar: String = "",
+    val postNum: Int = 0,
+    val concernNum: Int = 0,
+    val intro: String = "",
+    val slogan: String = "",
+    val isExact: Boolean = false,
+) {
+    val displayName: String get() = nameShow.ifEmpty { name }
+
+    companion object {
+        fun parse(json: JSONObject, exact: Boolean): ForumSearchItem = ForumSearchItem(
+            id = json.optLongOrString("forum_id"),
+            name = json.optString("forum_name"),
+            nameShow = json.optString("forum_name_show"),
+            avatar = json.optString("avatar"),
+            postNum = json.optIntFromString("post_num"),
+            concernNum = json.optIntFromString("concern_num"),
+            intro = json.optString("intro"),
+            slogan = json.optString("slogan"),
+            isExact = exact,
+        )
+    }
+}
+
+/** 吧搜索的整体结果：精确匹配 + 模糊匹配。 */
+data class ForumSearchResult(
+    val exact: ForumSearchItem? = null,
+    val fuzzy: List<ForumSearchItem> = emptyList(),
+    val hasMore: Boolean = false,
+) {
+    val isEmpty: Boolean get() = exact == null && fuzzy.isEmpty()
+
+    companion object {
+        fun parse(data: JSONObject): ForumSearchResult {
+            val exact = data.optJSONObject("exact_match")?.let { ForumSearchItem.parse(it, true) }
+            val fuzzy = ArrayList<ForumSearchItem>()
+            data.optJSONArray("fuzzy_match")?.let { array ->
+                for (i in 0 until array.length()) {
+                    array.optJSONObject(i)?.let { fuzzy.add(ForumSearchItem.parse(it, false)) }
+                }
+            }
+            return ForumSearchResult(
+                exact = exact,
+                fuzzy = fuzzy,
+                hasMore = data.optInt("has_more") != 0,
+            )
+        }
+    }
+}
+
+/**
+ * 帖子搜索结果。
+ *
+ * 数据来自网页端 `GET /mo/q/search/thread`，字段对应
+ * `data.post_list[].{tid,pid,title,content,time,post_num,like_num,forum_name,user{...}}`。
+ */
+data class ThreadSearchItem(
+    val tid: Long = 0,
+    val pid: Long = 0,
+    val title: String = "",
+    val content: String = "",
+    val forumName: String = "",
+    val authorName: String = "",
+    val replyNum: Int = 0,
+    val agreeNum: Int = 0,
+    val time: Long = 0,
+    val images: List<String> = emptyList(),
+) {
+    companion object {
+        fun parse(json: JSONObject): ThreadSearchItem {
+            val user = json.optJSONObject("user")
+            val media = ArrayList<String>()
+            json.optJSONArray("media")?.let { array ->
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    val url = item.optString("big_pic")
+                        .ifEmpty { item.optString("water_pic") }
+                        .ifEmpty { item.optString("small_pic") }
+                        .ifEmpty { item.optString("src") }
+                    if (url.isNotEmpty()) media.add(url)
+                }
+            }
+            return ThreadSearchItem(
+                tid = json.optLongOrString("tid"),
+                pid = json.optLongOrString("pid"),
+                title = json.optString("title"),
+                content = json.optString("content"),
+                forumName = json.optString("forum_name"),
+                authorName = user?.optString("show_nickname")?.ifEmpty { user.optString("user_name") }
+                    ?: "",
+                replyNum = json.optIntFromString("post_num"),
+                agreeNum = json.optIntFromString("like_num"),
+                time = json.optLongOrString("time"),
+                images = media,
+            )
+        }
+    }
+}
+
+/** 帖子搜索的分页结果。 */
+data class ThreadSearchResult(
+    val items: List<ThreadSearchItem> = emptyList(),
+    val currentPage: Int = 1,
+    val hasMore: Boolean = false,
+)
+
+/**
+ * 用户搜索结果。
+ *
+ * 数据来自网页端 `GET /mo/q/search/user`。
+ */
+data class UserSearchItem(
+    val id: Long = 0,
+    val name: String = "",
+    val nameShow: String = "",
+    val portrait: String = "",
+    val intro: String = "",
+    val fansNum: Int = 0,
+    val isExact: Boolean = false,
+) {
+    val displayName: String get() = nameShow.ifEmpty { name }
+
+    val portraitUrl: String
+        get() = if (portrait.isEmpty()) "" else "https://tb.himg.baidu.com/sys/portrait/item/$portrait"
+
+    companion object {
+        fun parse(json: JSONObject, exact: Boolean): UserSearchItem = UserSearchItem(
+            id = json.optLongOrString("id"),
+            name = json.optString("name").ifEmpty { json.optString("user_nickname") },
+            nameShow = json.optString("show_nickname"),
+            portrait = json.optString("portrait"),
+            intro = json.optString("intro"),
+            fansNum = json.optIntFromString("fans_num"),
+            isExact = exact,
+        )
+    }
+}
+
+/** 用户搜索结果：精确匹配 + 模糊匹配。 */
+data class UserSearchResult(
+    val exact: UserSearchItem? = null,
+    val fuzzy: List<UserSearchItem> = emptyList(),
+    val hasMore: Boolean = false,
+) {
+    val isEmpty: Boolean get() = exact == null && fuzzy.isEmpty()
+
+    companion object {
+        fun parse(data: JSONObject): UserSearchResult {
+            val exact = data.optJSONObject("exact_match")?.let { UserSearchItem.parse(it, true) }
+            val fuzzy = ArrayList<UserSearchItem>()
+            data.optJSONArray("fuzzy_match")?.let { array ->
+                for (i in 0 until array.length()) {
+                    array.optJSONObject(i)?.let { fuzzy.add(UserSearchItem.parse(it, false)) }
+                }
+            }
+            return UserSearchResult(
+                exact = exact,
+                fuzzy = fuzzy,
+                hasMore = data.optInt("has_more") != 0,
+            )
+        }
+    }
+}
+
+/** 吧内搜索（`POST /c/s/searchpost`）返回的一条帖子。 */
+data class ForumSearchPostItem(
+    val tid: Long = 0,
+    val pid: Long = 0,
+    val title: String = "",
+    val content: String = "",
+    val forumName: String = "",
+    val authorName: String = "",
+    val time: Long = 0,
+) {
+    companion object {
+        fun parse(json: JSONObject): ForumSearchPostItem {
+            val author = json.optJSONObject("author")
+            return ForumSearchPostItem(
+                tid = json.optLongOrString("tid"),
+                pid = json.optLongOrString("pid"),
+                title = json.optString("title"),
+                content = json.optString("content"),
+                forumName = json.optString("fname"),
+                authorName = author?.optString("name_show")?.ifEmpty { author.optString("name") } ?: "",
+                time = json.optLongOrString("time"),
+            )
+        }
+    }
+}
+
+/**
+ * JSON 里数字既有可能是 `123` 也可能是 `"123"`，两种都要能读。
+ */
+internal fun JSONObject.optLongOrString(key: String): Long {
+    val value = opt(key) ?: return 0L
+    return when (value) {
+        is Number -> value.toLong()
+        is String -> value.toLongOrNull() ?: 0L
+        else -> 0L
+    }
+}
+
+/** 同上，但用于 int。 */
+internal fun JSONObject.optIntFromString(key: String): Int {
+    val value = opt(key) ?: return 0
+    return when (value) {
+        is Number -> value.toInt()
+        is String -> value.filter { it.isDigit() }.toIntOrNull() ?: 0
+        else -> 0
+    }
+}

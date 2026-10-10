@@ -11,22 +11,66 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import com.tieba.miuix.data.TiebaRepository
 import com.tieba.miuix.ui.ForumListPage
+import com.tieba.miuix.ui.HistoryPage
+import com.tieba.miuix.ui.LocalHistoryStore
+import com.tieba.miuix.ui.LocalSearchHistoryStore
+import com.tieba.miuix.ui.LocalSettingsStore
+import com.tieba.miuix.ui.SearchPage
+import com.tieba.miuix.ui.SettingsPage
 import com.tieba.miuix.ui.ThreadDetailPage
 import com.tieba.miuix.ui.theme.TiebaTheme
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Home
+import top.yukonga.miuix.kmp.icon.extended.Recent
+import top.yukonga.miuix.kmp.icon.extended.Search
+import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
+
+/** 底部导航的四个入口。 */
+private const val TAB_HOME = 0
+private const val TAB_SEARCH = 1
+private const val TAB_HISTORY = 2
+private const val TAB_SETTINGS = 3
 
 /**
  * 唯一的 Activity。
  *
- * 页面切换只用最简单的状态机（列表页 <-> 帖子详情页），
- * 不引入 navigation 依赖，保持工程可编译的最小依赖面。
+ * 页面切换只用状态机，不引入 navigation 依赖：
+ * - 底部四个 Tab 常驻；
+ * - 帖子详情是盖在 Tab 之上的覆盖层，返回键先关覆盖层。
  */
 class MainActivity : ComponentActivity() {
 
@@ -43,46 +87,168 @@ class MainActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
 
-        val repository = (application as TiebaApplication).repository
+        val app = application as TiebaApplication
 
         setContent {
-            TiebaTheme {
-                TiebaApp(repository)
+            TiebaTheme(
+                settings = app.settingsStore.settings,
+                fontScale = app.settingsStore.fontScale,
+            ) {
+                CompositionLocalProvider(
+                    LocalSettingsStore provides app.settingsStore,
+                    LocalHistoryStore provides app.historyStore,
+                    LocalSearchHistoryStore provides app.searchHistoryStore,
+                ) {
+                    TiebaApp(app)
+                }
             }
         }
     }
 }
 
-/** 当前打开的主题帖；为空表示停留在列表页。 */
+/** 当前打开的主题帖；为空表示停留在 Tab 页。 */
 private data class OpenedThread(
     val tid: Long,
     val title: String,
     val forumName: String,
 )
 
+private data class BottomTab(
+    val label: String,
+    val icon: ImageVector,
+    val index: Int,
+)
+
 @Composable
-private fun TiebaApp(repository: TiebaRepository) {
+private fun TiebaApp(app: TiebaApplication) {
+    val repository: TiebaRepository = app.repository
+
     var openedThread by remember { mutableStateOf<OpenedThread?>(null) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(TAB_HOME) }
     var keyword by rememberSaveable { mutableStateOf("") }
 
-    val opened = openedThread
-    if (opened == null) {
-        ForumListPage(
-            repository = repository,
-            initialKeyword = keyword,
-            onKeywordChange = { keyword = it },
-            onOpenThread = { tid, title, forumName ->
-                openedThread = OpenedThread(tid = tid, title = title, forumName = forumName)
-            },
+    val tabs = remember {
+        listOf(
+            BottomTab("首页", MiuixIcons.Home, TAB_HOME),
+            BottomTab("搜索", MiuixIcons.Search, TAB_SEARCH),
+            BottomTab("历史", MiuixIcons.Recent, TAB_HISTORY),
+            BottomTab("设置", MiuixIcons.Settings, TAB_SETTINGS),
         )
-    } else {
-        BackHandler { openedThread = null }
-        ThreadDetailPage(
-            repository = repository,
-            tid = opened.tid,
-            title = opened.title,
-            forumName = opened.forumName,
-            onBack = { openedThread = null },
-        )
+    }
+    val bottomPadding = 72.dp
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        val opened = openedThread
+        if (opened != null) {
+            // 详情页盖满全屏，含底部导航区域。
+            BackHandler { openedThread = null }
+            ThreadDetailPage(
+                repository = repository,
+                tid = opened.tid,
+                title = opened.title,
+                forumName = opened.forumName,
+                onBack = { openedThread = null },
+            )
+        } else {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.weight(1f)) {
+                    when (selectedTab) {
+                        TAB_SEARCH -> SearchPage(
+                            bottomPadding = bottomPadding,
+                            onOpenThread = { tid, forumName ->
+                                openedThread = OpenedThread(tid, "", forumName)
+                            },
+                            onOpenForum = { name ->
+                                keyword = name
+                                selectedTab = TAB_HOME
+                            },
+                        )
+
+                        TAB_HISTORY -> HistoryPage(
+                            bottomPadding = bottomPadding,
+                            onOpenThread = { record ->
+                                openedThread = OpenedThread(record.tid, record.title, record.forumName)
+                            },
+                            onOpenForum = { name ->
+                                keyword = name
+                                selectedTab = TAB_HOME
+                            },
+                        )
+
+                        TAB_SETTINGS -> SettingsPage(bottomPadding = bottomPadding)
+
+                        else -> ForumListPage(
+                            repository = repository,
+                            initialKeyword = keyword,
+                            onKeywordChange = { keyword = it },
+                            onOpenThread = { tid, title, forumName ->
+                                openedThread = OpenedThread(tid, title, forumName)
+                            },
+                            bottomPadding = bottomPadding,
+                        )
+                    }
+                }
+
+                BottomBar(
+                    tabs = tabs,
+                    selectedTab = selectedTab,
+                    onSelect = { selectedTab = it },
+                )
+            }
+        }
+    }
+}
+
+/** 底部导航栏：四个等宽入口，选中项高亮。 */
+@Composable
+private fun BottomBar(
+    tabs: List<BottomTab>,
+    selectedTab: Int,
+    onSelect: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        tabs.forEach { tab ->
+            val selected = tab.index == selectedTab
+            Card(
+                modifier = Modifier.weight(1f),
+                cornerRadius = 14.dp,
+                insideMargin = PaddingValues(vertical = 8.dp),
+                colors = CardDefaults.defaultColors(
+                    color = if (selected) {
+                        MiuixTheme.colorScheme.primaryContainer
+                    } else {
+                        MiuixTheme.colorScheme.surfaceContainer
+                    },
+                    contentColor = if (selected) {
+                        MiuixTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    },
+                ),
+                pressFeedbackType = PressFeedbackType.Sink,
+                showIndication = true,
+                onClick = { onSelect(tab.index) },
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(
+                        imageVector = tab.icon,
+                        contentDescription = tab.label,
+                        modifier = Modifier.size(22.dp),
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(text = tab.label, style = MiuixTheme.textStyles.footnote2)
+                }
+            }
+        }
     }
 }

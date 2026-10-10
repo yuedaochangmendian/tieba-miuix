@@ -14,3 +14,4 @@ local.properties
 !debug.keystore
 keystore.properties
 /app/release
+build-local.log

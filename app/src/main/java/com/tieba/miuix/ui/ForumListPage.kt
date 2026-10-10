@@ -30,12 +30,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tieba.miuix.data.TiebaRepository
 import com.tieba.miuix.protocol.Page
 import com.tieba.miuix.protocol.SimpleForum
 import com.tieba.miuix.protocol.ThreadInfo
-import com.tieba.miuix.protocol.ThreadSortType
+import com.tieba.miuix.protocol.TiebaConst.ThreadSortType
 import com.tieba.miuix.protocol.toPlainText
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Button
@@ -71,6 +72,7 @@ fun ForumListPage(
     initialKeyword: String,
     onKeywordChange: (String) -> Unit,
     onOpenThread: (tid: Long, title: String, forumName: String) -> Unit,
+    bottomPadding: Dp = 16.dp,
 ) {
     val scope = rememberCoroutineScope()
     val scrollBehavior = MiuixScrollBehavior()
@@ -139,7 +141,7 @@ fun ForumListPage(
             start = 12.dp,
             end = 12.dp,
             top = innerPadding.calculateTopPadding() + 8.dp,
-            bottom = innerPadding.calculateBottomPadding() + 16.dp,
+            bottom = innerPadding.calculateBottomPadding() + bottomPadding,
         )
         PullToRefresh(
             isRefreshing = isRefreshing,
@@ -352,58 +354,6 @@ private fun ThreadCard(
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = thread.replyNum.toString() + " 回复",
-                style = MiuixTheme.textStyles.footnote2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            )
-        }
-    }
-}
-
-@Composable
-private fun MessageCard(
-    text: String,
-    isError: Boolean,
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 10.dp),
-        cornerRadius = 12.dp,
-        insideMargin = PaddingValues(16.dp),
-        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceContainer),
-    ) {
-        Text(
-            text = text,
-            style = MiuixTheme.textStyles.footnote1,
-            color = if (isError) MiuixTheme.colorScheme.error else MiuixTheme.colorScheme.onSurfaceVariantSummary,
-        )
-    }
-}
-
-@Composable
-private fun LoadMoreRow(
-    hasMore: Boolean,
-    isLoading: Boolean,
-    visible: Boolean,
-    onLoadMore: () -> Unit,
-) {
-    if (!visible) return
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 4.dp, bottom = 8.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (hasMore) {
-            Button(onClick = onLoadMore, enabled = !isLoading) {
-                Text(
-                    text = if (isLoading) "加载中…" else "加载更多",
-                    style = MiuixTheme.textStyles.button,
-                )
-            }
-        } else {
-            Text(
-                text = "没有更多了",
                 style = MiuixTheme.textStyles.footnote2,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             )
