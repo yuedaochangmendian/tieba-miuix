@@ -19,6 +19,8 @@ data class ThreadHistory(
     val authorName: String,
     val replyNum: Int,
     val time: Long,
+    /** 上次读到的那一层楼的 pid，下次打开帖子时用来回到原处；0 表示还没记过。 */
+    val lastPid: Long = 0L,
 )
 
 /** 最近逛过的吧。 */
@@ -80,6 +82,27 @@ class HistoryStore(context: Context) {
         prefs.edit().putString(KEY_THREADS, threadsToJson(next).toString()).apply()
     }
 
+    /**
+     * 记住「读到哪一层了」，下次打开这个帖子时可以跳回原处。
+     *
+     * 只更新已有记录的 pid，**不会**因为滚动就新建一条浏览记录：没进过历史的帖子
+     * （比如设置里关掉了记录浏览历史）不应该被这里悄悄写进去。
+     */
+    fun saveReadPosition(tid: Long, pid: Long) {
+        if (tid == 0L || pid == 0L) return
+        val index = threads.indexOfFirst { it.tid == tid }
+        if (index < 0) return
+        if (threads[index].lastPid == pid) return
+        val next = threads.toMutableList()
+        next[index] = next[index].copy(lastPid = pid)
+        threads = next
+        prefs.edit().putString(KEY_THREADS, threadsToJson(next).toString()).apply()
+    }
+
+    /** 取某个帖子记住的楼层 pid，没有记录时返回 0。 */
+    fun readPosition(tid: Long): Long =
+        threads.firstOrNull { it.tid == tid }?.lastPid ?: 0L
+
     fun clearThreads() {
         threads = emptyList()
         prefs.edit().remove(KEY_THREADS).apply()
@@ -111,6 +134,7 @@ class HistoryStore(context: Context) {
                         authorName = item.optString("author"),
                         replyNum = item.optInt("reply"),
                         time = item.optLong("time"),
+                        lastPid = item.optLong("last_pid"),
                     ),
                 )
             }
@@ -140,7 +164,8 @@ class HistoryStore(context: Context) {
                     .put("forum", record.forumName)
                     .put("author", record.authorName)
                     .put("reply", record.replyNum)
-                    .put("time", record.time),
+                    .put("time", record.time)
+                    .put("last_pid", record.lastPid),
             )
         }
         return array

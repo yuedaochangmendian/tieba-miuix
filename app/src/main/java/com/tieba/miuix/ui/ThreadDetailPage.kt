@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.clickable
@@ -124,6 +125,37 @@ fun ThreadDetailPage(
     var replyQuoteId by remember { mutableStateOf(0L) }
     var replyQuoteUid by remember { mutableStateOf(0L) }
     var replyToName by remember { mutableStateOf("") }
+
+    // 「上次读到哪」：首屏加载完后跳回记住的楼层，之后滚动时再记回来。
+    // restoring 期间不写回，免得把恢复过程本身当成用户滚动。
+    var restoringPosition by remember { mutableStateOf(true) }
+
+    // 恢复阅读位置：只在**第一页**里找记下的 pid，找到就滚过去。
+    // 找不到（那层楼被删了或在别的分页）就安静地停在顶部。
+    LaunchedEffect(posts, tid) {
+        if (!restoringPosition) return@LaunchedEffect
+        if (posts.isEmpty()) return@LaunchedEffect
+        val target = historyStore.readPosition(tid)
+        restoringPosition = false
+        if (target == 0L) return@LaunchedEffect
+        val index = posts.indexOfFirst { it.id == target }
+        if (index > 0) {
+            listState.scrollToItem(index)
+            note = "已回到上次读到的位置"
+        }
+    }
+
+    // 记录阅读位置：滚动停下来后把最上面那一层写进浏览记录（设置里关掉记录时跳过）。
+    LaunchedEffect(listState, posts, settings.recordHistory) {
+        if (!settings.recordHistory) return@LaunchedEffect
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .collect { index ->
+                if (restoringPosition) return@collect
+                val post = posts.getOrNull(index) ?: return@collect
+                if (post.id == 0L) return@collect
+                historyStore.saveReadPosition(tid, post.id)
+            }
+    }
 
     LaunchedEffect(note) {
         if (note.isBlank()) return@LaunchedEffect

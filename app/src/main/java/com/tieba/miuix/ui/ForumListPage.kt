@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tieba.miuix.data.TiebaRepository
 import com.tieba.miuix.protocol.ForumHome
+import com.tieba.miuix.protocol.ForumSearchItem
 import com.tieba.miuix.protocol.Page
 import com.tieba.miuix.protocol.SimpleForum
 import com.tieba.miuix.protocol.ThreadInfo
@@ -98,6 +99,26 @@ fun ForumListPage(
     var forumHome by remember { mutableStateOf<ForumHome?>(null) }
     var actionThread by remember { mutableStateOf<ThreadInfo?>(null) }
     var note by remember { mutableStateOf("") }
+    var forumSuggestions by remember { mutableStateOf<List<ForumSearchItem>>(emptyList()) }
+
+    // 输入吧名时给候选列表：打错一个字就进不去吧，这里直接让用户从候选里挑。
+    LaunchedEffect(keyword, forumName) {
+        val query = keyword.trim()
+        if (query.isEmpty() || query == forumName) {
+            forumSuggestions = emptyList()
+            return@LaunchedEffect
+        }
+        kotlinx.coroutines.delay(350)
+        val result = runCatching { repository.searchForum(query) }.getOrNull()
+        forumSuggestions = if (result == null) {
+            emptyList()
+        } else {
+            buildList {
+                result.exact?.let { add(it) }
+                addAll(result.fuzzy.filter { fuzzy -> fuzzy.id != result.exact?.id })
+            }.take(8)
+        }
+    }
 
     // 复制成功之类的提示展示几秒后自动消失，免得一直占着列表顶部。
     LaunchedEffect(note) {
@@ -203,6 +224,13 @@ fun ForumListPage(
                             keyword = trimmed
                             onKeywordChange(trimmed)
                             if (trimmed != forumName) forumName = trimmed
+                        },
+                        suggestions = forumSuggestions,
+                        onPickSuggestion = { picked ->
+                            keyword = picked.name
+                            onKeywordChange(picked.name)
+                            forumName = picked.name
+                            forumSuggestions = emptyList()
                         },
                     )
                 }
@@ -324,6 +352,8 @@ private fun SearchCard(
     sortType: Int,
     onSortTypeChange: (Int) -> Unit,
     onSubmit: () -> Unit,
+    suggestions: List<ForumSearchItem> = emptyList(),
+    onPickSuggestion: (ForumSearchItem) -> Unit = {},
 ) {
     Card(
         modifier = Modifier
@@ -355,6 +385,39 @@ private fun SearchCard(
                 }
             },
         )
+        if (suggestions.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            suggestions.forEach { suggestion ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    cornerRadius = 10.dp,
+                    insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    colors = CardDefaults.defaultColors(
+                        color = MiuixTheme.colorScheme.surfaceContainerHigh,
+                    ),
+                    pressFeedbackType = PressFeedbackType.Sink,
+                    showIndication = true,
+                    onClick = { onPickSuggestion(suggestion) },
+                ) {
+                    Text(
+                        text = if (suggestion.nameShow.isBlank()) {
+                            suggestion.name
+                        } else {
+                            suggestion.nameShow
+                        },
+                        style = MiuixTheme.textStyles.footnote1,
+                        color = MiuixTheme.colorScheme.onSurfaceContainer,
+                    )
+                    Text(
+                        text = suggestion.name + "吧 · " + formatCount(suggestion.postNum) + " 帖",
+                        style = MiuixTheme.textStyles.footnote2,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
+                }
+            }
+        }
         Spacer(modifier = Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             SORT_OPTIONS.forEach { option ->
