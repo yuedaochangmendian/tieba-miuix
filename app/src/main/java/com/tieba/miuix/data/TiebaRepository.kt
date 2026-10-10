@@ -10,10 +10,12 @@ import com.tieba.miuix.protocol.ForumHome
 import com.tieba.miuix.protocol.ForumSearchResult
 import com.tieba.miuix.protocol.FrsPageProto
 import com.tieba.miuix.protocol.ForumSearchPostResult
+import com.tieba.miuix.protocol.PbFloorProto
 import com.tieba.miuix.protocol.PbPageProto
 import com.tieba.miuix.protocol.ReplyResult
 import com.tieba.miuix.protocol.SignResult
 import com.tieba.miuix.protocol.StoredThreads
+import com.tieba.miuix.protocol.TiebaError
 import com.tieba.miuix.protocol.TiebaConst.PostSortType
 import com.tieba.miuix.protocol.ProtoHttp
 import com.tieba.miuix.protocol.ThreadSearchItem
@@ -126,6 +128,40 @@ class TiebaRepository(
         )
         val url = "https://${TiebaConst.APP_BASE_HOST}/c/f/pb/page?cmd=${TiebaConst.CMD_PB_PAGE}"
         PbPageProto.parse(ProtoHttp.post(url, payload))
+    }
+
+    /**
+     * 加载某一层的楼中楼（`/c/f/pb/floor`，`CMD=302002`）。
+     *
+     * 读取楼中楼**不需要登录**，所以这里始终按匿名请求发送（不带 BDUSS）。
+     */
+    suspend fun getSubPosts(
+        tid: Long,
+        pid: Long,
+        forumId: Long = 0L,
+        pn: Int = 1,
+    ): PbFloorProto.Response = withContext(Dispatchers.IO) {
+        if (tid <= 0L || pid <= 0L) {
+            return@withContext PbFloorProto.Response(
+                error = TiebaError(errno = 1, errmsg = "帖子或楼层 id 无效"),
+                page = null,
+                post = null,
+                subPosts = emptyList(),
+                thread = null,
+                forum = null,
+            )
+        }
+        val payload = PbFloorProto.pack(
+            PbFloorProto.Params(
+                tid = tid,
+                pid = pid,
+                pn = pn.coerceAtLeast(1),
+                forumId = forumId,
+                common = CommonReq(clientVersion = TiebaConst.LATEST_VERSION),
+            ),
+        )
+        val url = "https://${TiebaConst.APP_BASE_HOST}/c/f/pb/floor?cmd=${TiebaConst.CMD_PB_FLOOR}"
+        PbFloorProto.parse(ProtoHttp.post(url, payload))
     }
 
     // ---------------------------------------------------------------- 搜索
@@ -342,6 +378,8 @@ class TiebaRepository(
      * @param fid 吧 id，拿不到时传 0（服务端会用 kw 兜）
      * @param kw 吧名
      * @param content 正文
+     * @param quoteId 楼中楼 id：回复某一层楼中楼时传，回复主题帖时留 0
+     * @param replyUid 被回复者的 uid（回复楼中楼时一起带上）
      * @return [ReplyResult]，`isSuccess` 为 false 时看 `displayMessage`
      */
     suspend fun replyPost(
@@ -349,6 +387,8 @@ class TiebaRepository(
         fid: Long,
         kw: String,
         content: String,
+        quoteId: Long = 0L,
+        replyUid: Long = 0L,
     ): ReplyResult = withContext(Dispatchers.IO) {
         val credentials = credentialsProvider()
         if (!credentials.isLoggedIn) {
@@ -376,8 +416,8 @@ class TiebaRepository(
             "kw" to kw,
             "new_vcode" to "1",
             "post_from" to "3",
-            "quote_id" to "null",
-            "reply_uid" to "null",
+            "quote_id" to if (quoteId > 0L) quoteId.toString() else "null",
+            "reply_uid" to if (replyUid > 0L) replyUid.toString() else "null",
             "repostid" to "null",
             "stoken" to credentials.stoken,
             "takephoto_num" to "0",

@@ -114,6 +114,17 @@ fun ThreadDetailPage(
     // 本次会话里点过赞的楼层，用来切换按钮文案（服务端不下发「我是否已赞」）。
     var agreedPosts by remember { mutableStateOf(emptySet<Long>()) }
 
+    // 楼中楼：按需展开（`/c/f/pb/floor`，匿名可读）。
+    var expandedFloors by remember { mutableStateOf(emptySet<Long>()) }
+    var floorReplies by remember { mutableStateOf(emptyMap<Long, List<SubPostList>>()) }
+    var loadingFloors by remember { mutableStateOf(emptySet<Long>()) }
+    var floorPages by remember { mutableStateOf(emptyMap<Long, Page>()) }
+
+    // 回复某条楼中楼时的 quote_id / reply_uid（回复主题帖时都是 0）。
+    var replyQuoteId by remember { mutableStateOf(0L) }
+    var replyQuoteUid by remember { mutableStateOf(0L) }
+    var replyToName by remember { mutableStateOf("") }
+
     LaunchedEffect(note) {
         if (note.isBlank()) return@LaunchedEffect
         kotlinx.coroutines.delay(2600)
@@ -184,6 +195,10 @@ fun ThreadDetailPage(
                         !accountStore.hasTbs -> note = "还没取到发帖令牌（tbs），到「设置 → 账号」里刷新一下"
                         else -> {
                             replyError = ""
+                            // 悬浮按钮回复的是主题帖本身，清掉楼中楼引用。
+                            replyQuoteId = 0L
+                            replyQuoteUid = 0L
+                            replyToName = ""
                             showReply = true
                         }
                     }
@@ -315,9 +330,82 @@ fun ThreadDetailPage(
                     items = posts,
                     key = { post -> if (post.id != 0L) post.id else post.hashCode().toLong() },
                 ) { post ->
+                    val pid = post.id
                     PostCard(
                         post = post,
-                        agreed = agreedPosts.contains(post.id),
+                        agreed = agreedPosts.contains(pid),
+                        replies = floorReplies[pid].orEmpty(),
+                        repliesExpanded = expandedFloors.contains(pid),
+                        repliesLoading = loadingFloors.contains(pid),
+                        replyHasMore = floorPages[pid]?.hasMore == true,
+                        onToggleReplies = {
+                            if (pid != 0L) {
+                                if (expandedFloors.contains(pid)) {
+                                    expandedFloors = expandedFloors - pid
+                                } else {
+                                    expandedFloors = expandedFloors + pid
+                                    if (!floorReplies.containsKey(pid)) {
+                                        loadingFloors = loadingFloors + pid
+                                        scope.launch {
+                                            val loaded = runCatching {
+                                                repository.getSubPosts(
+                                                    tid = tid,
+                                                    pid = pid,
+                                                    forumId = forum?.id ?: thread?.fid ?: 0L,
+                                                    pn = 1,
+                                                )
+                                            }.getOrNull()
+                                            loadingFloors = loadingFloors - pid
+                                            if (loaded == null) {
+                                                note = "楼中楼加载失败，稍后再试"
+                                            } else if (!loaded.error.isOk) {
+                                                note = loaded.error.errmsg.ifBlank { "楼中楼加载失败" }
+                                            } else {
+                                                floorReplies = floorReplies + (pid to loaded.subPosts)
+                                                loaded.page?.let { floorPages = floorPages + (pid to it) }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        onLoadMoreReplies = {
+                            if (pid != 0L) {
+                                val next = (floorPages[pid]?.currentPage ?: 1) + 1
+                            loadingFloors = loadingFloors + pid
+                            scope.launch {
+                                val loaded = runCatching {
+                                    repository.getSubPosts(
+                                        tid = tid,
+                                        pid = pid,
+                                        forumId = forum?.id ?: thread?.fid ?: 0L,
+                                        pn = next,
+                                    )
+                                }.getOrNull()
+                                loadingFloors = loadingFloors - pid
+                                if (loaded != null && loaded.error.isOk) {
+                                    floorReplies = floorReplies +
+                                        (pid to (floorReplies[pid].orEmpty() + loaded.subPosts))
+                                    loaded.page?.let { floorPages = floorPages + (pid to it) }
+                                }
+                            }
+                            }
+                        },
+                        onReplySubPost = { sub ->
+                            if (!accountStore.isLoggedIn) {
+                                note = "回复需要先登录：到「设置 → 账号」里登录贴吧"
+                            } else if (!accountStore.hasTbs) {
+                                note = "还没取到发帖令牌（tbs），到「设置 → 账号」里刷新一下"
+                            } else {
+                                replyQuoteId = sub.id
+                                replyQuoteUid = sub.authorId.takeIf { it > 0L }
+                                    ?: sub.author?.id ?: 0L
+                                replyToName = sub.author?.displayName
+                                    ?.ifBlank { "匿名用户" } ?: "匿名用户"
+                                replyError = ""
+                                showReply = true
+                            }
+                        },
                         onOpenImages = { images, index ->
                             viewerImages = images
                             viewerIndex = index
@@ -412,7 +500,7 @@ fun ThreadDetailPage(
 
     if (showReply) {
         ReplyDialog(
-            title = shownTitle,
+            title = if (replyToName.isNotEmpty()) "回复 $replyToName" else shownTitle,
             forumName = forumName.ifBlank { forum?.name.orEmpty() },
             sending = replySending,
             errorMessage = replyError,
@@ -426,6 +514,8 @@ fun ThreadDetailPage(
                             fid = thread?.fid ?: forum?.id ?: 0L,
                             kw = forumName.ifBlank { forum?.name.orEmpty() },
                             content = content,
+                            quoteId = replyQuoteId,
+                            replyUid = replyQuoteUid,
                         )
                     }.getOrElse { e ->
                         com.tieba.miuix.protocol.ReplyResult(
@@ -438,6 +528,8 @@ fun ThreadDetailPage(
                         note = "回复成功"
                         // 回到第一页重新拉，顺带把页码、总楼层数刷新掉。
                         runCatching { reload() }
+                        floorReplies = emptyMap()
+                        floorPages = emptyMap()
                     } else {
                         replyError = result.displayMessage()
                     }
@@ -526,6 +618,13 @@ private fun ToolbarButton(
 private fun PostCard(
     post: Post,
     agreed: Boolean,
+    replies: List<SubPostList>,
+    repliesExpanded: Boolean,
+    repliesLoading: Boolean,
+    replyHasMore: Boolean,
+    onToggleReplies: () -> Unit,
+    onLoadMoreReplies: () -> Unit,
+    onReplySubPost: (SubPostList) -> Unit,
     onOpenImages: (List<ImageItem>, Int) -> Unit,
     onOpenUser: (portrait: String, uid: Long) -> Unit,
     onToggleAgree: () -> Unit,
@@ -593,7 +692,10 @@ private fun PostCard(
             )
         }
 
-        if (post.subPosts.isNotEmpty()) {
+        // 楼中楼按需加载（`/c/f/pb/floor`）。`post.subPosts` 只有在请求带
+        // `with_floor` 时才有内容，所以这里以按需拉取的 `replies` 为准。
+        val replyCount = maxOf(post.subPostNumber, replies.size)
+        if (replyCount > 0) {
             Spacer(modifier = Modifier.height(10.dp))
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -601,8 +703,46 @@ private fun PostCard(
                 insideMargin = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                 colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceContainerHigh),
             ) {
-                post.subPosts.forEach { sub ->
-                    SubPostItem(sub = sub)
+                if (repliesExpanded) {
+                    replies.forEach { sub ->
+                        SubPostItem(sub = sub, onReply = onReplySubPost)
+                    }
+                    if (repliesLoading) {
+                        Text(
+                            text = "正在加载…",
+                            style = MiuixTheme.textStyles.footnote1,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        )
+                    } else if (replyHasMore) {
+                        Text(
+                            text = "查看更多回复",
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onLoadMoreReplies() }
+                                .padding(vertical = 6.dp),
+                            style = MiuixTheme.textStyles.footnote1,
+                            color = MiuixTheme.colorScheme.primary,
+                        )
+                    }
+                    Text(
+                        text = "收起",
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onToggleReplies() }
+                            .padding(vertical = 6.dp),
+                        style = MiuixTheme.textStyles.footnote1,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
+                } else {
+                    Text(
+                        text = "查看 $replyCount 条回复",
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onToggleReplies() }
+                            .padding(vertical = 2.dp),
+                        style = MiuixTheme.textStyles.footnote1,
+                        color = MiuixTheme.colorScheme.primary,
+                    )
                 }
             }
         }
@@ -637,23 +777,40 @@ private fun PostCard(
 }
 
 @Composable
-private fun SubPostItem(sub: SubPostList) {
+private fun SubPostItem(sub: SubPostList, onReply: (SubPostList) -> Unit) {
     val context = LocalContext.current
     val portrait = sub.author?.portrait.orEmpty()
     val uid = sub.authorId.takeIf { it > 0L } ?: sub.author?.id ?: 0L
+    val authorName = sub.author?.displayName?.ifBlank { "匿名用户" } ?: "匿名用户"
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 3.dp),
     ) {
-        Text(
-            text = sub.author?.displayName?.ifBlank { "匿名用户" } ?: "匿名用户",
-            modifier = Modifier.clickable(enabled = portrait.isNotEmpty()) {
-                openUserPage(context, portrait, uid)
-            },
-            style = MiuixTheme.textStyles.footnote2,
-            color = MiuixTheme.colorScheme.primary,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = authorName,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .clickable(enabled = portrait.isNotEmpty()) {
+                        openUserPage(context, portrait, uid)
+                    },
+                style = MiuixTheme.textStyles.footnote2,
+                color = MiuixTheme.colorScheme.primary,
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            if (sub.id != 0L) {
+                Text(
+                    text = "回复",
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { onReply(sub) }
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    style = MiuixTheme.textStyles.footnote2,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(2.dp))
         val text = sub.content.toPlainText()
         if (text.isNotBlank()) {

@@ -43,6 +43,9 @@ object TiebaConst {
     /** 吧详情（protobuf）。 */
     const val CMD_FORUM_DETAIL = 303021
 
+    /** 楼中楼（protobuf）。 */
+    const val CMD_PB_FLOOR = 302002
+
     /** 吧列表默认每页条数。 */
     const val DEFAULT_THREAD_PAGE_SIZE = 30
 
