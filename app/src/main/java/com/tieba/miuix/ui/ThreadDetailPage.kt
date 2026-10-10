@@ -27,6 +27,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -108,6 +110,9 @@ fun ThreadDetailPage(
     var replyError by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var favorited by remember { mutableStateOf(false) }
+
+    // 本次会话里点过赞的楼层，用来切换按钮文案（服务端不下发「我是否已赞」）。
+    var agreedPosts by remember { mutableStateOf(emptySet<Long>()) }
 
     LaunchedEffect(note) {
         if (note.isBlank()) return@LaunchedEffect
@@ -312,11 +317,44 @@ fun ThreadDetailPage(
                 ) { post ->
                     PostCard(
                         post = post,
+                        agreed = agreedPosts.contains(post.id),
                         onOpenImages = { images, index ->
                             viewerImages = images
                             viewerIndex = index
                         },
                         onOpenUser = { portrait, uid -> openUserPage(context, portrait, uid) },
+                        onToggleAgree = {
+                            if (!accountStore.isLoggedIn) {
+                                note = "点赞需要先登录：到「设置 → 账号」里登录贴吧"
+                            } else if (!accountStore.hasTbs) {
+                                note = "还没取到发帖令牌（tbs），到「设置 → 账号」里刷新一下"
+                            } else {
+                                val target = !agreedPosts.contains(post.id)
+                                scope.launch {
+                                    val result = runCatching {
+                                        repository.setPostAgree(
+                                            threadId = tid,
+                                            postId = post.id,
+                                            agree = target,
+                                            // 楼层用 obj_type=1，楼中楼用 3。
+                                            objType = TiebaRepository.OBJ_TYPE_POST,
+                                        )
+                                    }.getOrNull()
+                                    when {
+                                        result == null -> note = "网络请求失败，稍后再试"
+                                        result.success -> {
+                                            agreedPosts = if (target) {
+                                                agreedPosts + post.id
+                                            } else {
+                                                agreedPosts - post.id
+                                            }
+                                            note = if (target) "已点赞" else "已取消赞"
+                                        }
+                                        else -> note = result.displayMessage
+                                    }
+                                }
+                            }
+                        },
                     )
                 }
 
@@ -487,8 +525,10 @@ private fun ToolbarButton(
 @Composable
 private fun PostCard(
     post: Post,
+    agreed: Boolean,
     onOpenImages: (List<ImageItem>, Int) -> Unit,
     onOpenUser: (portrait: String, uid: Long) -> Unit,
+    onToggleAgree: () -> Unit,
 ) {
     val images = post.content.toImages()
     val context = LocalContext.current
@@ -567,13 +607,31 @@ private fun PostCard(
             }
         }
 
-        if (post.agreeNum > 0) {
+        if (post.agreeNum > 0 || post.id != 0L) {
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "赞同 " + post.agreeNum,
-                style = MiuixTheme.textStyles.footnote2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = if (post.agreeNum > 0) "赞同 " + post.agreeNum else "",
+                    modifier = Modifier.weight(1f),
+                    style = MiuixTheme.textStyles.footnote2,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                )
+                if (post.id != 0L) {
+                    Text(
+                        text = if (agreed) "已赞" else "点赞",
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onToggleAgree() }
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                        style = MiuixTheme.textStyles.footnote2,
+                        color = if (agreed) {
+                            MiuixTheme.colorScheme.primary
+                        } else {
+                            MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        },
+                    )
+                }
+            }
         }
     }
 }

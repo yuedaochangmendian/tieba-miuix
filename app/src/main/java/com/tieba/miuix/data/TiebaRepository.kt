@@ -56,6 +56,14 @@ class TiebaRepository(
     /** 是否已登录。 */
     val isLoggedIn: Boolean get() = credentials.isLoggedIn
 
+    companion object {
+        /** `opAgree` 的 `obj_type`：点的是某个楼层。 */
+        const val OBJ_TYPE_POST = 1
+
+        /** `opAgree` 的 `obj_type`：点的是主题本身。 */
+        const val OBJ_TYPE_THREAD = 3
+    }
+
     /** 加载某个吧的主题帖列表。 */
     suspend fun getThreads(
         kw: String,
@@ -587,6 +595,55 @@ class TiebaRepository(
             params = listOf(
                 "fid" to (if (forumId > 0L) forumId.toString() else "null"),
                 "kw" to forumName,
+                "tbs" to credentials.tbs,
+                "stoken" to credentials.stoken,
+                "_client_version" to TiebaConst.LATEST_VERSION,
+            ),
+        )
+        CommonResult.of(json)
+    }
+
+    /**
+     * 点赞 / 取消点赞。
+     *
+     * `POST /c/c/agree/opAgree`：`obj_type` 决定点的是楼层还是主题
+     * （1 = 楼层，3 = 主题），`op_type` 0 = 点赞、1 = 取消赞。
+     * 必须带 `tbs`，否则服务端按未验证处理。
+     */
+    suspend fun setPostAgree(
+        threadId: Long,
+        postId: Long,
+        agree: Boolean,
+        objType: Int = OBJ_TYPE_POST,
+    ): CommonResult = withContext(Dispatchers.IO) {
+        val credentials = credentialsProvider()
+        if (!credentials.isLoggedIn) {
+            return@withContext CommonResult(
+                success = false,
+                errorCode = 340006,
+                errorMessage = "点赞需要先登录：到「我的 → 账号」里登录贴吧",
+            )
+        }
+        if (credentials.tbs.isEmpty()) {
+            return@withContext CommonResult(
+                success = false,
+                errorCode = 4,
+                errorMessage = "缺少发帖令牌（tbs），到「我的 → 账号」里刷新一下",
+            )
+        }
+        if (threadId <= 0L || postId <= 0L) {
+            return@withContext CommonResult(false, 0, "帖子 id 无效")
+        }
+        val json = WebHttp.postFormJson(
+            host = TiebaConst.APP_BASE_HOST,
+            path = "/c/c/agree/opAgree",
+            params = listOf(
+                "post_id" to postId.toString(),
+                "thread_id" to threadId.toString(),
+                "cuid_gid" to "",
+                "agree_type" to "2",
+                "obj_type" to objType.toString(),
+                "op_type" to (if (agree) "0" else "1"),
                 "tbs" to credentials.tbs,
                 "stoken" to credentials.stoken,
                 "_client_version" to TiebaConst.LATEST_VERSION,
