@@ -28,7 +28,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** 设置页。 */
 @Composable
-fun SettingsPage(bottomPadding: androidx.compose.ui.unit.Dp) {
+fun SettingsPage(bottomPadding: androidx.compose.ui.unit.Dp, onOpenBlock: () -> Unit = {}) {
     val settingsStore = LocalSettingsStore.current
     val settings = settingsStore.settings
     val historyStore = LocalHistoryStore.current
@@ -37,6 +37,7 @@ fun SettingsPage(bottomPadding: androidx.compose.ui.unit.Dp) {
     val repository = LocalRepository.current
     val loginNote = LocalLoginNote.current
     val requestLogin = LocalRequestLogin.current
+    val blocks = blockStore
     val scrollBehavior = MiuixScrollBehavior()
 
     // 「清空」是破坏性操作，清完给一句提示，让用户知道确实生效了。
@@ -166,6 +167,15 @@ fun SettingsPage(bottomPadding: androidx.compose.ui.unit.Dp) {
                         summary = "关闭后只显示昵称；页面里同时带用户名与昵称的才生效",
                         checked = settings.showBothNameAndNickname,
                         onCheckedChange = { settingsStore.setShowBothNameAndNickname(it) },
+                    )
+                    ActionRow(
+                        title = "屏蔽管理",
+                        summary = if (blocks.isEmpty) {
+                            "关键词与用户的黑白名单（当前为空）"
+                        } else {
+                            "关键词与用户的黑白名单 · " + blocks.rules.size.toString() + " 条规则"
+                        },
+                        onClick = onOpenBlock,
                     )
                 }
             }

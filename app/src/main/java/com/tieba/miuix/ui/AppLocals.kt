@@ -3,8 +3,12 @@
 package com.tieba.miuix.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalContext
+import com.tieba.miuix.TiebaApplication
 import com.tieba.miuix.data.AccountStore
+import com.tieba.miuix.data.BlockStore
 import com.tieba.miuix.data.HistoryStore
 import com.tieba.miuix.data.SearchHistoryStore
 import com.tieba.miuix.data.Settings
@@ -37,6 +41,20 @@ val LocalHistoryStore = staticCompositionLocalOf<HistoryStore> {
 val LocalSearchHistoryStore = staticCompositionLocalOf<SearchHistoryStore> {
     error("LocalSearchHistoryStore 尚未提供，请在 MainActivity 的 setContent 里 provide")
 }
+
+/**
+ * 取屏蔽规则仓库。
+ *
+ * 不额外加一个 CompositionLocal：`BlockStore` 挂在 [TiebaApplication] 上是进程内唯一实例，
+ * 任何页面（含二级 Activity）都能从 `LocalContext` 拿到同一份数据，
+ * 所以设置页改了规则，帖子详情页立刻就能看到效果。
+ */
+val blockStore: BlockStore
+    @Composable get() {
+        val context = LocalContext.current
+        val app = context.applicationContext as? TiebaApplication
+        return app?.blockStore ?: remember(context) { BlockStore(context) }
+    }
 
 /**
  * 触发登录流程。

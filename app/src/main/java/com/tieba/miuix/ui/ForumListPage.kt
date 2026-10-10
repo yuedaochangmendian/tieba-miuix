@@ -108,6 +108,8 @@ fun ForumListPage(
     var note by remember { mutableStateOf("") }
     var forumSuggestions by remember { mutableStateOf<List<ForumSearchItem>>(emptyList()) }
     val searchHistoryStore = LocalSearchHistoryStore.current
+    // CompositionLocal 只能在组合里读，先取出来给 LazyColumn / 动作表用。
+    val blocks = blockStore
 
     // 输入吧名时给候选列表：打错一个字就进不去吧，这里直接让用户从候选里挑。
     LaunchedEffect(keyword, forumName) {
@@ -318,7 +320,7 @@ fun ForumListPage(
                     }
                 }
 
-                items(items = threads, key = { it.id }) { thread ->
+                items(items = threads.filterNot { blocks.shouldBlockThread(it) }, key = { it.id }) { thread ->
                     Box(modifier = Modifier.padding(bottom = 10.dp)) {
                         if (settings.threadListMode == ThreadListMode.SINGLE) {
                             ThreadRow(
@@ -373,6 +375,14 @@ fun ForumListPage(
                 onOpenUser(portrait)
             },
             onNote = { note = it },
+            onBlockAuthor = {
+                val uid = sheetThread.authorId.takeIf { it > 0L }
+                    ?: sheetThread.author?.id ?: 0L
+                val name = sheetThread.author?.displayName.orEmpty()
+                blocks.addUser(uid = uid, userName = name)
+                actionThread = null
+                note = "已屏蔽" + (name.ifEmpty { "该用户" }) + "，可在「设置 → 屏蔽管理」里取消"
+            },
         )
     }}
 

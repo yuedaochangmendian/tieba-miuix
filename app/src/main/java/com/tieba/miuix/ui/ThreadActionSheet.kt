@@ -17,6 +17,7 @@ import com.tieba.miuix.protocol.ThreadInfo
  * @param onOpenForum 进入帖子所属的吧
  * @param onOpenUser 打开楼主资料页，参数是 portrait
  * @param onNote 给用户一句提示（复制成功之类）
+ * @param onBlockAuthor 屏蔽楼主；不传则不显示这一行
  */
 @Composable
 fun ThreadActionSheet(
@@ -26,17 +27,21 @@ fun ThreadActionSheet(
     onOpenForum: (forumName: String) -> Unit,
     onOpenUser: (portrait: String) -> Unit,
     onNote: (String) -> Unit,
+    onBlockAuthor: (() -> Unit)? = null,
 ) {
     ThreadActionSheet(
         title = thread.title,
         tid = thread.id,
         forumName = thread.fname,
         portrait = thread.author?.portrait.orEmpty(),
+        authorUid = thread.authorId.takeIf { it > 0L } ?: thread.author?.id ?: 0L,
+        authorName = thread.author?.displayName.orEmpty(),
         onDismiss = onDismiss,
         onOpenThread = onOpenThread,
         onOpenForum = onOpenForum,
         onOpenUser = onOpenUser,
         onNote = onNote,
+        onBlockAuthor = onBlockAuthor,
     )
 }
 
@@ -50,6 +55,8 @@ fun ThreadActionSheet(
  * @param tid 帖子 id，用于复制链接与分享
  * @param forumName 帖子所属吧名，空串则不显示「进入某吧」
  * @param portrait 楼主 portrait，空串则不显示「查看楼主」
+ * @param authorUid / authorName 楼主标识，用于「屏蔽楼主」
+ * @param onBlockAuthor 屏蔽楼主；为 null 时不显示这一行
  */
 @Composable
 fun ThreadActionSheet(
@@ -57,11 +64,14 @@ fun ThreadActionSheet(
     tid: Long,
     forumName: String,
     portrait: String = "",
+    authorUid: Long = 0L,
+    authorName: String = "",
     onDismiss: () -> Unit,
     onOpenThread: () -> Unit,
     onOpenForum: (forumName: String) -> Unit,
     onOpenUser: (portrait: String) -> Unit,
     onNote: (String) -> Unit,
+    onBlockAuthor: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
 
@@ -85,6 +95,13 @@ fun ThreadActionSheet(
             ActionSheetRow(
                 text = "查看楼主",
                 onClick = { onOpenUser(portrait) },
+                onAfter = onDismiss,
+            )
+        }
+        if (onBlockAuthor != null && (authorUid > 0L || authorName.isNotEmpty())) {
+            ActionSheetRow(
+                text = "屏蔽楼主",
+                onClick = onBlockAuthor,
                 onAfter = onDismiss,
             )
         }

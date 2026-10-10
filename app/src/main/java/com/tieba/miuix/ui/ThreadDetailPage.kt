@@ -122,6 +122,10 @@ fun ThreadDetailPage(
     var loadingFloors by remember { mutableStateOf(emptySet<Long>()) }
     var floorPages by remember { mutableStateOf(emptyMap<Long, Page>()) }
 
+    // 被屏蔽规则命中的楼层默认折叠成一句提示，用户点「仍要查看」后放进这个集合。
+    var revealedPosts by remember { mutableStateOf(emptySet<Long>()) }
+    val blocks = blockStore
+
     // 回复某条楼中楼时的 quote_id / reply_uid（回复主题帖时都是 0）。
     var replyQuoteId by remember { mutableStateOf(0L) }
     var replyQuoteUid by remember { mutableStateOf(0L) }
@@ -368,6 +372,12 @@ fun ThreadDetailPage(
                     key = { post -> if (post.id != 0L) post.id else post.hashCode().toLong() },
                 ) { post ->
                     val pid = post.id
+                    if (blocks.shouldBlockPost(post) && !revealedPosts.contains(pid)) {
+                        BlockedPostCard(
+                            onReveal = { revealedPosts = revealedPosts + pid },
+                        )
+                        return@items
+                    }
                     PostCard(
                         post = post,
                         agreed = agreedPosts.contains(pid),
@@ -648,6 +658,44 @@ private fun ToolbarButton(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+/**
+ * 被屏蔽规则命中的楼层：默认只留一句提示和一个「仍要查看」按钮。
+ *
+ * 帖子详情页不整条丢掉内容，是因为楼层顺序本身是阅读上下文——
+ * 直接抽掉会让「N 楼」的编号断裂，用户也不好判断自己漏看了什么。
+ */
+@Composable
+private fun BlockedPostCard(onReveal: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 14.dp,
+        insideMargin = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
+        colors = CardDefaults.defaultColors(
+            color = MiuixTheme.colorScheme.surfaceContainer,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "这一层被屏蔽规则过滤了",
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = "仍要查看",
+                style = MiuixTheme.textStyles.button,
+                color = MiuixTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clickable { onReveal() }
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+            )
+        }
     }
 }
 

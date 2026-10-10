@@ -14,6 +14,7 @@ import coil3.disk.directory
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.tieba.miuix.data.AccountStore
+import com.tieba.miuix.data.BlockStore
 import com.tieba.miuix.data.HistoryStore
 import com.tieba.miuix.data.SearchHistoryStore
 import com.tieba.miuix.data.SettingsStore
@@ -47,6 +48,8 @@ class TiebaApplication : Application(), SingletonImageLoader.Factory {
     val historyStore: HistoryStore by lazy { HistoryStore(this) }
 
     val searchHistoryStore: SearchHistoryStore by lazy { SearchHistoryStore(this) }
+
+    val blockStore: BlockStore by lazy { BlockStore(this) }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader {
         val client = OkHttpClient.Builder()

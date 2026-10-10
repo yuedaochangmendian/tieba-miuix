@@ -75,6 +75,8 @@ fun HomeFeedPage(
     val scrollBehavior = MiuixScrollBehavior()
     val pullToRefreshState = rememberPullToRefreshState()
     val listState = rememberLazyListState()
+    // CompositionLocal 只能在组合里读，先取出来再进 LazyColumn 的 item lambda。
+    val blocks = blockStore
 
     var mode by rememberSaveable { mutableIntStateOf(HOME_MODE_RECOMMEND) }
     var threads by remember { mutableStateOf<List<ThreadInfo>>(emptyList()) }
@@ -176,7 +178,8 @@ fun HomeFeedPage(
                     }
                 }
 
-                items(items = threads, key = { it.id }) { thread ->
+                // 屏蔽规则（关键词 / 用户）在客户端过滤掉，和 TiebaLite 一样不发请求。
+                items(items = threads.filterNot { blocks.shouldBlockThread(it) }, key = { it.id }) { thread ->
                     RecommendCard(
                         thread = thread,
                         onClick = { onOpenThread(thread.id, thread.title, thread.fname) },

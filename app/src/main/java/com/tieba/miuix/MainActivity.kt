@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.tieba.miuix.data.TiebaRepository
+import com.tieba.miuix.ui.BlockPage
 import com.tieba.miuix.ui.FavoritesPage
 import com.tieba.miuix.ui.ForumDetailActivity
 import com.tieba.miuix.ui.ForumListPage
@@ -95,6 +96,7 @@ private const val PROFILE_PAGE_NONE = 0
 private const val PROFILE_PAGE_FAVORITES = 1
 private const val PROFILE_PAGE_HISTORY = 2
 private const val PROFILE_PAGE_SETTINGS = 3
+private const val PROFILE_PAGE_BLOCK = 4
 /**
  * 唯一的 Activity。
  *
@@ -240,7 +242,15 @@ private fun TiebaApp(app: TiebaApplication) {
                     },
                 )
 
-                else -> SettingsPage(bottomPadding = 16.dp)
+                PROFILE_PAGE_BLOCK -> BlockPage(
+                    bottomPadding = 16.dp,
+                    onBack = { profilePage = PROFILE_PAGE_SETTINGS },
+                )
+
+                else -> SettingsPage(
+                    bottomPadding = 16.dp,
+                    onOpenBlock = { profilePage = PROFILE_PAGE_BLOCK },
+                )
             }
             return@CompositionLocalProvider
         }
