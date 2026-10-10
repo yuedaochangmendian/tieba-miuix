@@ -30,6 +30,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,15 +44,19 @@ import com.tieba.miuix.ui.theme.TiebaTheme
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.Refresh
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
@@ -120,6 +125,9 @@ private fun ForumDetailScreen(
     var reloadKey by remember { mutableStateOf(0) }
     var sheetThread by remember { mutableStateOf<ForumDetailProto.SimpleThread?>(null) }
     var note by remember { mutableStateOf("") }
+    var showConcernDialog by remember { mutableStateOf(false) }
+    val accountStore = LocalAccountStore.current
+    val scope = rememberCoroutineScope()
     val scrollBehavior = MiuixScrollBehavior()
 
     // 复制链接成功之类的提示展示几秒后自动消失。
@@ -174,6 +182,23 @@ private fun ForumDetailScreen(
                     }
                 },
                 actions = {
+                    val info = detail
+                    if (info != null) {
+                        IconButton(onClick = {
+                            when {
+                                !accountStore.isLoggedIn ->
+                                    note = "关注需要先登录：到「设置 → 账号」里登录贴吧"
+                                !accountStore.hasTbs ->
+                                    note = "还没取到发帖令牌（tbs），到「设置 → 账号」里刷新一下"
+                                else -> showConcernDialog = true
+                            }
+                        }) {
+                            Icon(
+                                imageVector = MiuixIcons.Favorites,
+                                contentDescription = if (info.isLiked) "已关注" else "关注",
+                            )
+                        }
+                    }
                     IconButton(onClick = { reloadKey += 1 }) {
                         Icon(imageVector = MiuixIcons.Refresh, contentDescription = "刷新")
                     }
@@ -240,6 +265,65 @@ private fun ForumDetailScreen(
             onOpenUser = {},
             onNote = { note = it },
         )
+    }
+
+    val info = detail
+    if (showConcernDialog && info != null) {
+        val concerning = !info.isLiked
+        OverlayDialog(
+            show = true,
+            title = if (concerning) "关注" + info.forumName + "吧" else "取消关注",
+            summary = if (concerning) {
+                "关注后可以在「我的 → 关注的吧」里快速找到它。"
+            } else {
+                "取消关注后不会再出现在关注的吧列表里。"
+            },
+            onDismissRequest = { showConcernDialog = false },
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                TextButton(
+                    text = "再想想",
+                    onClick = { showConcernDialog = false },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColors(),
+                )
+                TextButton(
+                    text = if (concerning) "关注" else "取消关注",
+                    onClick = {
+                        showConcernDialog = false
+                        scope.launch {
+                            val result = runCatching {
+                                repository.setForumConcerned(
+                                    forumId = info.forumId,
+                                    forumName = info.forumName.ifBlank { forumName },
+                                    concern = concerning,
+                                )
+                            }.getOrNull()
+                            if (result?.success == true) {
+                                note = if (concerning) "已关注" else "已取消关注"
+                                // 重新拉一次吧详情，把 is_like 状态刷新掉。
+                                reloadKey += 1
+                            } else {
+                                note = result?.displayMessage ?: "操作失败"
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColors(
+                        color = if (concerning) {
+                            MiuixTheme.colorScheme.primary
+                        } else {
+                            MiuixTheme.colorScheme.error
+                        },
+                    ),
+                )
+            }
+        }
     }
 }
 

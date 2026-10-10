@@ -3,6 +3,8 @@
 package com.tieba.miuix.data
 
 import com.tieba.miuix.protocol.CommonReq
+import com.tieba.miuix.protocol.CommonResult
+import com.tieba.miuix.protocol.ConcernedForums
 import com.tieba.miuix.protocol.ForumDetailProto
 import com.tieba.miuix.protocol.ForumHome
 import com.tieba.miuix.protocol.ForumSearchResult
@@ -10,6 +12,7 @@ import com.tieba.miuix.protocol.FrsPageProto
 import com.tieba.miuix.protocol.ForumSearchPostResult
 import com.tieba.miuix.protocol.PbPageProto
 import com.tieba.miuix.protocol.ReplyResult
+import com.tieba.miuix.protocol.StoredThreads
 import com.tieba.miuix.protocol.TiebaConst.PostSortType
 import com.tieba.miuix.protocol.ProtoHttp
 import com.tieba.miuix.protocol.ThreadSearchItem
@@ -22,12 +25,15 @@ import com.tieba.miuix.protocol.UserSearchResult
 import com.tieba.miuix.protocol.WebHttp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 
 /** 登录凭证。匿名浏览时全部为空。 */
 data class Credentials(
     val bduss: String = "",
     val stoken: String = "",
     val tbs: String = "",
+    val uid: String = "",
 ) {
     val isLoggedIn: Boolean get() = bduss.isNotEmpty()
 }
@@ -378,6 +384,153 @@ class TiebaRepository(
             params = params,
         )
         ReplyResult.parse(json)
+    }
+
+    // ------------------------------------------------------------ 收藏 / 关注
+
+    /**
+     * 我的收藏（主题帖）。
+     *
+     * `POST /c/f/post/threadstore`：表单字段是 `rn` + `offset` + `user_id`，
+     * 页码靠偏移量推出来（offset = (pn - 1) * rn）。未登录时服务端会拒绝，
+     * 这里先在本地拦一道，返回空列表 + 可读原因。
+     */
+    suspend fun getStoredThreads(pn: Int = 1, rn: Int = StoredThreads.PAGE_SIZE): StoredThreads =
+        withContext(Dispatchers.IO) {
+            val credentials = credentialsProvider()
+            if (!credentials.isLoggedIn) {
+                return@withContext StoredThreads(errorCode = 340006, errorMessage = "还没有登录")
+            }
+            val page = pn.coerceAtLeast(1)
+            val size = rn.coerceIn(1, 100)
+            val json = WebHttp.postFormJson(
+                host = TiebaConst.APP_BASE_HOST,
+                path = "/c/f/post/threadstore",
+                params = listOf(
+                    "rn" to size.toString(),
+                    "offset" to ((page - 1) * size).toString(),
+                    "user_id" to credentials.uid,
+                    "stoken" to credentials.stoken,
+                    "_client_version" to TiebaConst.LATEST_VERSION,
+                ),
+            )
+            StoredThreads.parse(json)
+        }
+
+    /**
+     * 我关注的吧。
+     *
+     * `POST /c/f/forum/getforumlist`：`/c/f/` 前缀的老通道，同样需要 BDUSS。
+     */
+    suspend fun getConcernedForums(): ConcernedForums = withContext(Dispatchers.IO) {
+        val credentials = credentialsProvider()
+        if (!credentials.isLoggedIn) {
+            return@withContext ConcernedForums(errorCode = 340006, errorMessage = "还没有登录")
+        }
+        val json = WebHttp.postFormJson(
+            host = TiebaConst.APP_BASE_HOST,
+            path = "/c/f/forum/getforumlist",
+            params = listOf(
+                "stoken" to credentials.stoken,
+                "_client_version" to TiebaConst.LATEST_VERSION,
+            ),
+        )
+        ConcernedForums.parse(json)
+    }
+
+    /**
+     * 收藏 / 取消收藏主题帖。
+     *
+     * `POST /c/c/post/addstore` 的字段是单个 `data`，值是 `[{pid,tid,status}]`
+     * 的 JSON 文本（照 TiebaLite `NewCollectDataBean` 抄），`status=1` 收藏、
+     * `status=0` 取消。返回体是 `error_code` + `error_msg`。
+     */
+    suspend fun setThreadStored(
+        tid: Long,
+        pid: Long,
+        store: Boolean,
+    ): CommonResult = withContext(Dispatchers.IO) {
+        val credentials = credentialsProvider()
+        if (!credentials.isLoggedIn) {
+            return@withContext CommonResult(
+                success = false,
+                errorCode = 340006,
+                errorMessage = "收藏需要先登录：到「我的 → 账号」里登录贴吧",
+            )
+        }
+        if (credentials.tbs.isEmpty()) {
+            return@withContext CommonResult(
+                success = false,
+                errorCode = 4,
+                errorMessage = "缺少发帖令牌（tbs），到「我的 → 账号」里刷新一下",
+            )
+        }
+        if (tid <= 0L) {
+            return@withContext CommonResult(false, 0, "帖子 id 无效")
+        }
+        val data = JSONArray().apply {
+            put(
+                JSONObject().apply {
+                    put("tid", tid.toString())
+                    put("pid", (if (pid > 0L) pid else tid).toString())
+                    put("status", if (store) 1 else 0)
+                },
+            )
+        }.toString()
+        val json = WebHttp.postFormJson(
+            host = TiebaConst.APP_BASE_HOST,
+            path = "/c/c/post/addstore",
+            params = listOf(
+                "data" to data,
+                "tbs" to credentials.tbs,
+                "stoken" to credentials.stoken,
+                "_client_version" to TiebaConst.LATEST_VERSION,
+            ),
+        )
+        CommonResult.of(json)
+    }
+
+    /**
+     * 关注 / 取关某个吧。
+     *
+     * `POST /c/c/forum/like`：`fid` 传 `null` 时服务端用 `kw` 解析吧，
+     * `tbs` 必须带，否则返回「需要验证码」一类错误。
+     */
+    suspend fun setForumConcerned(
+        forumId: Long,
+        forumName: String,
+        concern: Boolean,
+    ): CommonResult = withContext(Dispatchers.IO) {
+        val credentials = credentialsProvider()
+        if (!credentials.isLoggedIn) {
+            return@withContext CommonResult(
+                success = false,
+                errorCode = 340006,
+                errorMessage = "关注需要先登录：到「我的 → 账号」里登录贴吧",
+            )
+        }
+        if (credentials.tbs.isEmpty()) {
+            return@withContext CommonResult(
+                success = false,
+                errorCode = 4,
+                errorMessage = "缺少发帖令牌（tbs），到「我的 → 账号」里刷新一下",
+            )
+        }
+        if (forumName.isBlank() && forumId <= 0L) {
+            return@withContext CommonResult(false, 0, "吧名无效")
+        }
+        val json = WebHttp.postFormJson(
+            host = TiebaConst.APP_BASE_HOST,
+            path = if (concern) "/c/c/forum/like" else "/c/c/forum/unlike",
+            params = listOf(
+                "fid" to (if (forumId > 0L) forumId.toString() else "null"),
+                "kw" to forumName,
+                "tbs" to credentials.tbs,
+                "stoken" to credentials.stoken,
+                "_client_version" to TiebaConst.LATEST_VERSION,
+            ),
+        )
+        CommonResult.of(json)
     }
 
     // ---------------------------------------------------------------- 登录

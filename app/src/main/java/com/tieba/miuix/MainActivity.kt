@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.tieba.miuix.data.TiebaRepository
+import com.tieba.miuix.ui.FavoritesPage
 import com.tieba.miuix.ui.ForumDetailActivity
 import com.tieba.miuix.ui.ForumListPage
 import com.tieba.miuix.ui.HistoryPage
@@ -67,6 +68,7 @@ import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.Home
 import top.yukonga.miuix.kmp.icon.extended.Recent
 import top.yukonga.miuix.kmp.icon.extended.Search
@@ -77,8 +79,9 @@ import top.yukonga.miuix.kmp.utils.PressFeedbackType
 /** 底部导航的四个入口。 */
 private const val TAB_HOME = 0
 private const val TAB_SEARCH = 1
-private const val TAB_HISTORY = 2
-private const val TAB_SETTINGS = 3
+private const val TAB_FAVORITES = 2
+private const val TAB_HISTORY = 3
+private const val TAB_SETTINGS = 4
 /**
  * 唯一的 Activity。
  *
@@ -170,6 +173,7 @@ private fun TiebaApp(app: TiebaApplication) {
         listOf(
             BottomTab("首页", MiuixIcons.Home, TAB_HOME),
             BottomTab("搜索", MiuixIcons.Search, TAB_SEARCH),
+            BottomTab("我的", MiuixIcons.Favorites, TAB_FAVORITES),
             BottomTab("历史", MiuixIcons.Recent, TAB_HISTORY),
             BottomTab("设置", MiuixIcons.Settings, TAB_SETTINGS),
         )
@@ -193,6 +197,18 @@ private fun TiebaApp(app: TiebaApplication) {
                         onOpenForum = { name ->
                             keyword = name
                             selectedTab = TAB_HOME
+                        },
+                    )
+
+                    TAB_FAVORITES -> FavoritesPage(
+                        bottomPadding = bottomPadding,
+                        onOpenThread = { tid, title, forumName ->
+                            context.startActivity(
+                                ThreadDetailActivity.intent(context, tid, title, forumName),
+                            )
+                        },
+                        onOpenForum = { name ->
+                            context.startActivity(ForumDetailActivity.intent(context, name))
                         },
                     )
 

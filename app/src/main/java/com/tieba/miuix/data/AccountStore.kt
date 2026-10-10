@@ -58,7 +58,7 @@ class AccountStore(context: Context) {
     val hasTbs: Boolean get() = tbs.isNotEmpty()
 
     /** 生成仓库用的凭证快照。 */
-    fun credentials(): Credentials = Credentials(bduss = bduss, stoken = stoken, tbs = tbs)
+    fun credentials(): Credentials = Credentials(bduss = bduss, stoken = stoken, tbs = tbs, uid = uid)
 
     /**
      * 登录成功后写入账号。

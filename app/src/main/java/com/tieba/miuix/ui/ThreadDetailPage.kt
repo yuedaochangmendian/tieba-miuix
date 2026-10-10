@@ -55,6 +55,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.rememberPullToRefreshState
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.Info
 import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.icon.extended.Reply
@@ -106,6 +107,7 @@ fun ThreadDetailPage(
     var replySending by remember { mutableStateOf(false) }
     var replyError by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
+    var favorited by remember { mutableStateOf(false) }
 
     LaunchedEffect(note) {
         if (note.isBlank()) return@LaunchedEffect
@@ -227,6 +229,29 @@ fun ThreadDetailPage(
                         }) {
                             Icon(imageVector = MiuixIcons.Info, contentDescription = "吧详情")
                         }
+                    }
+                    IconButton(onClick = {
+                        if (!accountStore.isLoggedIn) {
+                            note = "收藏需要先登录：到「设置 → 账号」里登录贴吧"
+                        } else {
+                            scope.launch {
+                                val result = runCatching {
+                                    repository.setThreadStored(
+                                        tid = tid,
+                                        pid = posts.firstOrNull()?.id ?: 0L,
+                                        store = !favorited,
+                                    )
+                                }.getOrNull()
+                                if (result?.success == true) {
+                                    favorited = !favorited
+                                    note = if (favorited) "已加入收藏" else "已取消收藏"
+                                } else {
+                                    note = result?.displayMessage ?: "操作失败"
+                                }
+                            }
+                        }
+                    }) {
+                        Icon(imageVector = MiuixIcons.Favorites, contentDescription = "收藏")
                     }
                     IconButton(onClick = {
                         shareThread(context, tid, shownTitle)
